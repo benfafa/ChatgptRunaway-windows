@@ -622,15 +622,6 @@ pub fn run() {
                     }
                 });
             }
-            // Hide the popover on focus loss to mimic the macOS menubar extra.
-            if let Some(win) = app.get_webview_window("main") {
-                let h = app.handle().clone();
-                win.on_window_event(move |event| {
-                    if let tauri::WindowEvent::Focused(false) = event {
-                        hide_popover(&h);
-                    }
-                });
-            }
             // We deliberately do NOT pre-render the tray icon here.
             // tauri.conf.json already wires a static iconPath. Calling
             // `tray.set_icon()` during setup races with that initial
