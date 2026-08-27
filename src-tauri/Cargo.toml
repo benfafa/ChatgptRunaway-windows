@@ -1,0 +1,69 @@
+[package]
+name = "codex-runway-windows"
+version = "0.1.0"
+description = "Native Windows tray app for Codex"
+authors = ["Codex Runway Windows Contributors"]
+license = "AGPL-3.0"
+repository = "https://github.com/your-org/codex-runway-windows"
+edition = "2021"
+rust-version = "1.77"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "codex_runway_windows_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.1", features = ["tray-icon", "image-png"] }
+tauri-plugin-dialog = "2.0"
+tauri-plugin-fs = "2.0"
+tauri-plugin-http = { version = "2.0", features = ["unsafe-headers"] }
+tauri-plugin-os = "2.0"
+tauri-plugin-shell = "2.0"
+tauri-plugin-single-instance = "2.0"
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5.0"
+tokio = { version = "1.41", features = ["full"] }
+base64 = "0.22"
+uuid = { version = "1.11", features = ["v4"] }
+url = "2.5"
+log = "0.4"
+env_logger = "0.11"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+walkdir = "2.5"
+image = { version = "0.25", default-features = false, features = ["png"] }
+sha2 = "0.10"
+rand = "0.8"
+hex = "0.4"
+libc = "0.2"
+rust_decimal = { version = "1.36", features = ["serde-with-str"] }
+rust_decimal_macros = "1.36"
+
+[dev-dependencies]
+tempdir = "0.3"
+tokio = { version = "1.41", features = ["macros", "rt-multi-thread"] }
+mockito = "1.5"
+
+[[example]]
+name = "tray_preview"
+path = "examples/tray_preview.rs"
+
+[features]
+# This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

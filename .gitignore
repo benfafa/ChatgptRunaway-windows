@@ -1,0 +1,29 @@
+# Node
+node_modules
+dist
+*.tsbuildinfo
+
+# Rust
+target
+**/*.rs.bk
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode
+.idea
+*.swp
+*.swo
+
+# Env
+.env
+.env.local
+
+# Tauri
+src-tauri/target
+src-tauri/gen
+
+# Misc
+.turbo
