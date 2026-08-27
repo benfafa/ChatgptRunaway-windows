@@ -49,7 +49,7 @@ rust_decimal = { version = "1.36", features = ["serde-with-str"] }
 rust_decimal_macros = "1.36"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_Networking_WinSock"] }
 
 [dev-dependencies]
 tempdir = "0.3"

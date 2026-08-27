@@ -301,7 +301,26 @@ fn set_recv_timeout(listener: &TcpListener, dur: Duration) -> std::io::Result<()
             return Err(std::io::Error::last_os_error());
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawSocket;
+        use windows_sys::Win32::Networking::WinSock::{setsockopt, SOL_SOCKET, SO_RCVTIMEO, SOCKET};
+        let millis = dur.as_millis().clamp(1, u32::MAX as u128) as u32;
+        let socket = listener.as_raw_socket() as SOCKET;
+        let rv = unsafe {
+            setsockopt(
+                socket,
+                SOL_SOCKET,
+                SO_RCVTIMEO,
+                &millis as *const _ as *const _,
+                std::mem::size_of::<u32>() as i32,
+            )
+        };
+        if rv != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = (listener, dur);
     }

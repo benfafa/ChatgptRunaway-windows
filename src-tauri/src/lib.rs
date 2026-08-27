@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tauri::image::Image;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::account::{AccountAuthMode, AccountIndex, AccountRow, AccountStore};
@@ -609,6 +609,18 @@ pub fn run() {
                 });
                 let menu = build_tray_menu(&handle_for_menu)?;
                 let _ = tray.set_menu(Some(menu));
+                let handle_for_menu_event = app.handle().clone();
+                tray.on_menu_event(move |app, event| {
+                    match event.id.as_ref() {
+                        "show" => show_popover(app),
+                        "refresh" => {
+                            show_popover(app);
+                            let _ = app.emit("refresh-requested", ());
+                        }
+                        "quit" => app.exit(0),
+                        _ => {}
+                    }
+                });
             }
             // Hide the popover on focus loss to mimic the macOS menubar extra.
             if let Some(win) = app.get_webview_window("main") {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { api, type AccountIndex, type QuotaSnapshot, type ResetCreditsSnapshot, type UsageSummary, type AccountRow, type ApiCostSummary } from "./api";
 import { AccountsCard } from "./components/AccountsCard";
 import { QuotaCard } from "./components/QuotaCard";
@@ -19,6 +20,14 @@ export default function App() {
 
   useEffect(() => {
     refresh().catch((e) => setError(String(e)));
+
+    const unlistenPromise = listen("refresh-requested", () => {
+      refresh().catch((e) => setError(String(e)));
+    });
+
+    return () => {
+      unlistenPromise.then((unlisten) => unlisten());
+    };
   }, []);
 
   async function refresh() {
