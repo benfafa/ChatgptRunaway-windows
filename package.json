@@ -1,13 +1,18 @@
 {
   "name": "codex-runway-windows",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "Native Windows tray app for Codex: quota, multi-account, local sessions. Windows port of Licoy/codex-runway.",
+  "description": "Native Windows tray app for Codex: quota, multi-account, local sessions, OAuth login, API cost. Windows port of Licoy/codex-runway.",
   "license": "AGPL-3.0",
   "engines": {
     "node": ">=20",
     "pnpm": ">=9"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "scripts": {
     "dev": "vite",
