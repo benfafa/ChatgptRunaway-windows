@@ -1,48 +1,44 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { open } from "@tauri-apps/plugin-shell";
 import { api } from "../api";
+import { translations } from "../i18n";
 
 type Mode = "oauth" | "paste";
 
 interface Props {
   onClose: () => void;
-  /** Called with the parsed Codex auth when paste mode succeeds. */
   onSubmitPaste: (auth: unknown, label: string | null) => void;
-  /** Called after OAuth login completes (the account is already in the
-   *  library; the parent should refresh). */
   onOAuthComplete: () => void;
+  t: typeof translations["zh-CN"];
 }
 
-export function AddAccountDialog({ onClose, onSubmitPaste, onOAuthComplete }: Props) {
+export function AddAccountDialog({ onClose, onSubmitPaste, onOAuthComplete, t }: Props) {
   const [mode, setMode] = useState<Mode>("oauth");
   return (
     <div className="dialog-backdrop" onClick={onClose}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <h2>Add Codex account</h2>
-        <p>
-          Sign in with ChatGPT, or paste an existing{" "}
-          <code>~/.codex/auth.json</code> file.
+      <div className="dialog glass-modal" onClick={(e) => e.stopPropagation()}>
+        <h2>{t.dialogAddTitle}</h2>
+        <p style={{ color: "var(--fg-muted)", fontSize: 12, marginTop: 4 }}>
+          {t.dialogAddSubtitle}
         </p>
-        <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 12, marginTop: 12 }}>
           <button
             className={`btn ${mode === "oauth" ? "" : "btn--ghost"}`}
             onClick={() => setMode("oauth")}
-            disabled={mode === "oauth"}
           >
-            Sign in with ChatGPT
+            {t.dialogOAuthTab}
           </button>
           <button
             className={`btn ${mode === "paste" ? "" : "btn--ghost"}`}
             onClick={() => setMode("paste")}
-            disabled={mode === "paste"}
           >
-            Paste auth.json
+            {t.dialogPasteTab}
           </button>
         </div>
         {mode === "oauth" ? (
-          <OAuthFlow onClose={onClose} onComplete={onOAuthComplete} />
+          <OAuthFlow onClose={onClose} onComplete={onOAuthComplete} t={t} />
         ) : (
-          <PasteFlow onClose={onClose} onSubmit={onSubmitPaste} />
+          <PasteFlow onClose={onClose} onSubmit={onSubmitPaste} t={t} />
         )}
       </div>
     </div>
@@ -52,9 +48,11 @@ export function AddAccountDialog({ onClose, onSubmitPaste, onOAuthComplete }: Pr
 function OAuthFlow({
   onClose,
   onComplete,
+  t,
 }: {
   onClose: () => void;
   onComplete: () => void;
+  t: typeof translations["zh-CN"];
 }) {
   const [phase, setPhase] = useState<"idle" | "opening" | "waiting" | "done" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -64,13 +62,8 @@ function OAuthFlow({
     setPhase("opening");
     try {
       const session = await api.oauthStart();
-      // Open the system browser. On Windows this is the default browser
-      // because Tauri 2's `shell.open` resolves to the OS handler.
       await open(session.auth_url);
       setPhase("waiting");
-      // Hand off to the backend: it picks up the listener it created in
-      // `oauth_start` (bound to the same `port` we returned), waits for
-      // the browser to redirect, and exchanges the code for tokens.
       await api.oauthFinish(
         session.port,
         session.login_id,
@@ -87,9 +80,8 @@ function OAuthFlow({
 
   return (
     <div>
-      <p style={{ marginBottom: 12 }}>
-        Click below to open ChatGPT sign-in in your browser. After you finish,
-        this window will refresh with the new account ready to use.
+      <p style={{ marginBottom: 12, fontSize: 12, color: "var(--fg-muted)" }}>
+        {t.dialogOAuthPrompt}
       </p>
       {error ? (
         <div style={{ color: "var(--danger)", fontSize: 12, marginBottom: 8 }}>
@@ -98,18 +90,18 @@ function OAuthFlow({
       ) : null}
       <div className="dialog__actions">
         <button className="btn btn--ghost" onClick={onClose}>
-          Cancel
+          {t.dialogCancel}
         </button>
         <button
           className="btn"
           onClick={start}
           disabled={phase === "opening" || phase === "waiting" || phase === "done"}
         >
-          {phase === "idle" && "Open ChatGPT sign-in"}
-          {phase === "opening" && "Preparing…"}
-          {phase === "waiting" && "Waiting for sign-in…"}
-          {phase === "done" && "Done"}
-          {phase === "error" && "Retry"}
+          {phase === "idle" && t.dialogOAuthStartBtn}
+          {phase === "opening" && t.dialogOAuthOpening}
+          {phase === "waiting" && t.dialogOAuthWaiting}
+          {phase === "done" && t.dialogOAuthDone}
+          {phase === "error" && t.dialogOAuthRetry}
         </button>
       </div>
     </div>
@@ -119,9 +111,11 @@ function OAuthFlow({
 function PasteFlow({
   onClose,
   onSubmit,
+  t,
 }: {
   onClose: () => void;
   onSubmit: (auth: unknown, label: string | null) => void;
+  t: typeof translations["zh-CN"];
 }) {
   const [pasted, setPasted] = useState("");
   const [label, setLabel] = useState("");
@@ -133,11 +127,11 @@ function PasteFlow({
     try {
       parsed = JSON.parse(pasted);
     } catch (e) {
-      setError(`Invalid JSON: ${(e as Error).message}`);
+      setError(`JSON 格式无效: ${(e as Error).message}`);
       return;
     }
     if (typeof parsed !== "object" || parsed == null) {
-      setError("Expected a JSON object");
+      setError("需提供合法的 JSON 对象");
       return;
     }
     onSubmit(parsed, label.trim() || null);
@@ -146,11 +140,11 @@ function PasteFlow({
   return (
     <div>
       <div className="field">
-        <label htmlFor="label">Label (optional)</label>
+        <label htmlFor="label">{t.dialogLabelField}</label>
         <input
           id="label"
           type="text"
-          placeholder="personal · work · plus"
+          placeholder={t.dialogLabelPlaceholder}
           value={label}
           onChange={(e) => setLabel(e.target.value)}
         />
@@ -160,7 +154,7 @@ function PasteFlow({
         <textarea
           id="auth"
           spellCheck={false}
-          placeholder='{ "auth_mode": "chatgpt", "tokens": { "access_token": "…", "refresh_token": "…" } }'
+          placeholder={t.dialogAuthPlaceholder}
           value={pasted}
           onChange={(e) => setPasted(e.target.value)}
         />
@@ -170,10 +164,10 @@ function PasteFlow({
       ) : null}
       <div className="dialog__actions">
         <button className="btn btn--ghost" onClick={onClose}>
-          Cancel
+          {t.dialogCancel}
         </button>
         <button className="btn" onClick={submit} disabled={!pasted.trim()}>
-          Add
+          {t.dialogSubmitAdd}
         </button>
       </div>
     </div>

@@ -250,6 +250,76 @@ fn scan_local_sessions(state: State<'_, AppState>) -> AppResult<UsageSummary> {
     scanner.scan()
 }
 
+#[derive(Debug, Serialize)]
+pub struct BackupResult {
+    pub files_copied: usize,
+    pub target_dir: String,
+}
+
+#[tauri::command]
+fn backup_sessions(state: State<'_, AppState>, target_path: String) -> AppResult<BackupResult> {
+    let src = state.paths.sessions_dir();
+    if !src.exists() {
+        return Err(AppError::Config(format!("Sessions directory does not exist: {}", src.display())));
+    }
+    let target = PathBuf::from(&target_path);
+    std::fs::create_dir_all(&target)?;
+
+    let mut copied = 0;
+    for entry in walkdir::WalkDir::new(&src).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_file() {
+            if let Ok(rel) = path.strip_prefix(&src) {
+                let dest = target.join(rel);
+                if let Some(parent) = dest.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::copy(path, &dest)?;
+                copied += 1;
+            }
+        }
+    }
+    Ok(BackupResult {
+        files_copied: copied,
+        target_dir: target.to_string_lossy().to_string(),
+    })
+}
+
+#[derive(Debug, Serialize)]
+pub struct RestoreResult {
+    pub files_restored: usize,
+    pub dest_dir: String,
+}
+
+#[tauri::command]
+fn restore_sessions(state: State<'_, AppState>, source_path: String) -> AppResult<RestoreResult> {
+    let src = PathBuf::from(&source_path);
+    if !src.exists() {
+        return Err(AppError::Config(format!("Backup source directory does not exist: {}", src.display())));
+    }
+    let dest = state.paths.sessions_dir();
+    std::fs::create_dir_all(&dest)?;
+
+    let mut restored = 0;
+    for entry in walkdir::WalkDir::new(&src).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_file() && path.extension().map(|s| s.eq_ignore_ascii_case("jsonl")).unwrap_or(false) {
+            if let Ok(rel) = path.strip_prefix(&src) {
+                let target = dest.join(rel);
+                if let Some(parent) = target.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::copy(path, &target)?;
+                restored += 1;
+            }
+        }
+    }
+    Ok(RestoreResult {
+        files_restored: restored,
+        dest_dir: dest.to_string_lossy().to_string(),
+    })
+}
+
 /// Optional ISO-8601 lower bound. `None` = all time.
 #[tauri::command]
 fn compute_api_cost(
@@ -583,6 +653,8 @@ pub fn run() {
             fetch_reset_credits,
             apply_tray_icon_for,
             scan_local_sessions,
+            backup_sessions,
+            restore_sessions,
             compute_api_cost,
             oauth_start,
             oauth_finish,
@@ -641,9 +713,9 @@ fn toggle_popover(app: &AppHandle) {
 
 fn build_tray_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-    let show = MenuItem::with_id(app, "show", "Open Codex Runway", true, None::<&str>)?;
-    let refresh = MenuItem::with_id(app, "refresh", "Refresh quota", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "打开 Codex Runway (Open)", true, None::<&str>)?;
+    let refresh = MenuItem::with_id(app, "refresh", "刷新用量配额 (Refresh)", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出程序 (Quit)", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     Menu::with_items(app, &[&show, &refresh, &sep, &quit])
 }

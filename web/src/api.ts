@@ -82,6 +82,26 @@ export interface SessionTurn {
   cwd: string | null;
 }
 
+export interface DailyUsage {
+  date: string;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  turns_count: number;
+}
+
+export interface SessionItem {
+  session_id: string;
+  file_path: string;
+  created_at: string;
+  last_updated_at: string;
+  turns_count: number;
+  total_tokens: number;
+  primary_model: string | null;
+  cwd: string | null;
+}
+
 export interface UsageSummary {
   sessions_scanned: number;
   turns_scanned: number;
@@ -90,6 +110,8 @@ export interface UsageSummary {
   total_output_tokens: number;
   total_tokens: number;
   per_model: ModelUsage[];
+  daily_usage?: DailyUsage[];
+  sessions?: SessionItem[];
   recent: SessionTurn[];
 }
 
@@ -146,6 +168,16 @@ export interface OAuthSessionInfo {
   state: string;
 }
 
+export interface BackupResult {
+  files_copied: number;
+  target_dir: string;
+}
+
+export interface RestoreResult {
+  files_restored: number;
+  dest_dir: string;
+}
+
 export const api = {
   appInfo: () => invoke<AppInfo>("app_info"),
   loadOfficialAuth: () => invoke<RedactedAuth | null>("load_official_auth"),
@@ -165,6 +197,10 @@ export const api = {
   applyTrayIconFor: (usedPercent: number) =>
     invoke<void>("apply_tray_icon_for", { usedPercent }),
   scanLocalSessions: () => invoke<UsageSummary>("scan_local_sessions"),
+  backupSessions: (targetPath: string) =>
+    invoke<BackupResult>("backup_sessions", { targetPath }),
+  restoreSessions: (sourcePath: string) =>
+    invoke<RestoreResult>("restore_sessions", { sourcePath }),
   computeApiCost: (since?: string) =>
     invoke<ApiCostSummary>("compute_api_cost", { since: since ?? null }),
 

@@ -1,21 +1,23 @@
-import type { AccountIndex, AccountRow } from "../api";
+﻿import type { AccountIndex, AccountRow } from "../api";
+import { translations } from "../i18n";
 
 interface Props {
   accounts: AccountIndex;
+  t: typeof translations["zh-CN"];
   onActivate: (row: AccountRow) => void;
   onDelete: (row: AccountRow) => void;
   onAddClick: () => void;
 }
 
-export function AccountsCard({ accounts, onActivate, onDelete, onAddClick }: Props) {
+export function AccountsCard({ accounts, t, onActivate, onDelete, onAddClick }: Props) {
   if (accounts.accounts.length === 0) {
     return (
-      <div className="card">
-        <p className="card__title">Accounts</p>
+      <div className="card glass-panel">
+        <p className="card__title">{t.accountsTitle}</p>
         <div className="empty">
-          No Codex accounts in the library.
+          {t.noAccounts}
           <div style={{ marginTop: 8 }}>
-            <button className="btn" onClick={onAddClick}>Add account</button>
+            <button className="btn btn--glass" onClick={onAddClick}>{t.addAccountBtn}</button>
           </div>
         </div>
       </div>
@@ -23,8 +25,12 @@ export function AccountsCard({ accounts, onActivate, onDelete, onAddClick }: Pro
   }
 
   return (
-    <div className="card">
-      <p className="card__title">Accounts</p>
+    <div className="card glass-panel">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <p className="card__title" style={{ margin: 0 }}>{t.accountsTitle}</p>
+        <button className="btn btn--sm btn--glass" onClick={onAddClick}>+ {t.addAccountBtn}</button>
+      </div>
+
       {accounts.accounts.map((row) => (
         <div
           key={row.id}
@@ -37,24 +43,21 @@ export function AccountsCard({ accounts, onActivate, onDelete, onAddClick }: Pro
               <div className="row__sub">
                 {row.email ?? row.account_id ?? row.id}
                 {row.requires_reauth ? (
-                  <span className="tag tag--danger" style={{ marginLeft: 6 }}>re-auth required</span>
+                  <span className="tag tag--danger" style={{ marginLeft: 6 }}>{t.reauthRequired}</span>
                 ) : null}
               </div>
             </div>
           </div>
           <div className="row__actions">
             {row.id !== accounts.active_id ? (
-              <button className="iconbtn" title="Activate" onClick={() => onActivate(row)}>↺</button>
+              <button className="iconbtn" title={t.activateBtn} onClick={() => onActivate(row)}>↺</button>
             ) : (
-              <span className="tag tag--ok">active</span>
+              <span className="tag tag--ok">{t.activeBadge}</span>
             )}
-            <button className="iconbtn" title="Remove from library" onClick={() => onDelete(row)}>✕</button>
+            <button className="iconbtn" title={t.removeBtn} onClick={() => onDelete(row)}>✕</button>
           </div>
         </div>
       ))}
-      <div style={{ marginTop: 8 }}>
-        <button className="btn btn--ghost" onClick={onAddClick}>+ Add account</button>
-      </div>
     </div>
   );
 }

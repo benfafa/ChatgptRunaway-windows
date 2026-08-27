@@ -1,14 +1,17 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { api, type AccountIndex, type QuotaSnapshot, type ResetCreditsSnapshot, type UsageSummary, type AccountRow, type ApiCostSummary } from "./api";
+import { useLanguage } from "./i18n";
 import { AccountsCard } from "./components/AccountsCard";
 import { QuotaCard } from "./components/QuotaCard";
 import { ResetCreditsCard } from "./components/ResetCreditsCard";
-import { UsageCard } from "./components/UsageCard";
+import { VisualUsageCard } from "./components/VisualUsageCard";
 import { CostCard } from "./components/CostCard";
 import { AddAccountDialog } from "./components/AddAccountDialog";
 
 export default function App() {
+  const { toggle, t } = useLanguage();
   const [accounts, setAccounts] = useState<AccountIndex | null>(null);
   const [quota, setQuota] = useState<QuotaSnapshot | null>(null);
   const [reset, setReset] = useState<ResetCreditsSnapshot | null>(null);
@@ -16,6 +19,7 @@ export default function App() {
   const [cost, setCost] = useState<ApiCostSummary | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -29,6 +33,13 @@ export default function App() {
       unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   async function refresh() {
     setRefreshing(true);
@@ -66,9 +77,10 @@ export default function App() {
       ]);
       setQuota(q);
       setReset(r);
-      // fetch_quota already pushed the icon, but call again to be explicit
-      // (and to update if we ever support a different rounding).
-      await api.applyTrayIconFor(q.primary.used_percent).catch(() => {});
+      // Update dynamic tray icon to match current primary quota
+      if (q?.primary) {
+        api.applyTrayIconFor(q.primary.used_percent).catch(() => {});
+      }
     } catch (e) {
       setError(String(e));
     }
@@ -87,7 +99,9 @@ export default function App() {
   }
 
   async function onDelete(row: AccountRow) {
-    if (!confirm(`Delete account "${row.label}"? This only removes it from the Codex Runway library; the official auth.json is not touched.`)) return;
+    if (!confirm(`确定要移除账号 "${row.label}" 吗？`)) {
+      return;
+    }
     setRefreshing(true);
     try {
       await api.deleteAccount(row.id);
@@ -113,6 +127,39 @@ export default function App() {
     }
   }
 
+  async function handleBackup() {
+    try {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        title: "选择会话备份目标文件夹 (Select Backup Folder)",
+      });
+      if (selected && typeof selected === "string") {
+        const res = await api.backupSessions(selected);
+        setToast(t.backupSuccess.replace("{count}", String(res.files_copied)).replace("{path}", res.target_dir));
+      }
+    } catch (e) {
+      setError(`备份失败: ${e}`);
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      const selected = await openDialog({
+        directory: true,
+        multiple: false,
+        title: "选择包含 .jsonl 会话的备份文件夹 (Select Restore Folder)",
+      });
+      if (selected && typeof selected === "string") {
+        const res = await api.restoreSessions(selected);
+        setToast(t.restoreSuccess.replace("{count}", String(res.files_restored)));
+        await refresh();
+      }
+    } catch (e) {
+      setError(`还原失败: ${e}`);
+    }
+  }
+
   const active = accounts?.accounts.find((a) => a.id === accounts.active_id);
 
   return (
@@ -120,41 +167,70 @@ export default function App() {
       <header className="app__header">
         <div className="app__title">
           <span className="app__title-dot" />
-          Codex Runway
-          {active ? <span className="tag">{active.label}</span> : null}
+          <span>{t.appTitle}</span>
+          {active ? <span className="tag tag--ok">{active.label}</span> : null}
         </div>
-        <button
-          className="app__refresh"
-          aria-label="Refresh"
-          onClick={() => refresh()}
-          disabled={refreshing}
-        >
-          {refreshing ? "…" : "↻"}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <button
+            className="btn btn--sm btn--glass"
+            onClick={toggle}
+            title="Switch Language / 切换语言"
+            style={{ fontWeight: 700, padding: "2px 6px" }}
+          >
+            {t.langToggle}
+          </button>
+          <button
+            className="app__refresh"
+            aria-label={t.refreshTitle}
+            title={t.refreshTitle}
+            onClick={() => refresh()}
+            disabled={refreshing}
+          >
+            {refreshing ? "…" : "↻"}
+          </button>
+        </div>
       </header>
 
       <main className="app__body">
-        {error ? <div className="empty" style={{ color: "var(--danger)" }}>{error}</div> : null}
+        {error ? (
+          <div className="card glass-panel" style={{ color: "var(--danger)", marginBottom: 8, fontSize: 12 }}>
+            {error}
+          </div>
+        ) : null}
+
+        {toast ? (
+          <div className="card glass-panel" style={{ color: "var(--ok)", marginBottom: 8, fontSize: 12, border: "1px solid var(--ok)" }}>
+            {toast}
+          </div>
+        ) : null}
 
         {accounts ? (
           <AccountsCard
             accounts={accounts}
+            t={t}
             onActivate={onActivate}
             onDelete={onDelete}
             onAddClick={() => setShowAdd(true)}
           />
         ) : (
-          <div className="empty">Loading…</div>
+          <div className="empty">{t.refreshing}</div>
         )}
 
-        {quota ? <QuotaCard quota={quota} /> : null}
-        {reset ? <ResetCreditsCard reset={reset} /> : null}
-        {usage ? <UsageCard usage={usage} /> : null}
-        {cost ? <CostCard cost={cost} /> : null}
+        {quota ? <QuotaCard quota={quota} t={t} /> : null}
+        {reset ? <ResetCreditsCard reset={reset} t={t} /> : null}
+        {usage ? (
+          <VisualUsageCard
+            usage={usage}
+            t={t}
+            onBackup={handleBackup}
+            onRestore={handleRestore}
+          />
+        ) : null}
+        {cost ? <CostCard cost={cost} t={t} /> : null}
       </main>
 
       <footer className="app__footer">
-        <span>Local-only • no tokens uploaded</span>
+        <span>{t.localOnlyFooter}</span>
       </footer>
 
       {showAdd ? (
@@ -165,6 +241,7 @@ export default function App() {
             setShowAdd(false);
             refresh();
           }}
+          t={t}
         />
       ) : null}
     </div>
@@ -179,15 +256,13 @@ function pickAccountId(auth: any): string {
   return "imported";
 }
 
-function decodeJwtSub(jwt: string | undefined): string | null {
-  if (!jwt) return null;
-  const parts = jwt.split(".");
-  if (parts.length < 2) return null;
+function decodeJwtSub(token: string | undefined): string | null {
+  if (!token) return null;
   try {
-    const padded = parts[1].replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (parts[1].length % 4)) % 4);
-    const json = atob(padded);
-    const obj = JSON.parse(json);
-    return typeof obj.sub === "string" ? obj.sub : null;
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const payload = JSON.parse(atob(parts[1]));
+    return payload.sub ?? payload.user_id ?? null;
   } catch {
     return null;
   }

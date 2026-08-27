@@ -30,6 +30,28 @@ pub struct SessionTurn {
     pub cwd: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct DailyUsage {
+    pub date: String, // "YYYY-MM-DD"
+    pub input_tokens: i64,
+    pub cached_input_tokens: i64,
+    pub output_tokens: i64,
+    pub total_tokens: i64,
+    pub turns_count: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SessionItem {
+    pub session_id: String,
+    pub file_path: String,
+    pub created_at: DateTime<Utc>,
+    pub last_updated_at: DateTime<Utc>,
+    pub turns_count: usize,
+    pub total_tokens: i64,
+    pub primary_model: Option<String>,
+    pub cwd: Option<String>,
+}
+
 #[derive(Debug, Default, Clone, Serialize)]
 pub struct UsageSummary {
     pub sessions_scanned: usize,
@@ -39,6 +61,8 @@ pub struct UsageSummary {
     pub total_output_tokens: i64,
     pub total_tokens: i64,
     pub per_model: Vec<ModelUsage>,
+    pub daily_usage: Vec<DailyUsage>,
+    pub sessions: Vec<SessionItem>,
     pub recent: Vec<SessionTurn>,
 }
 
@@ -114,6 +138,10 @@ impl<'a> SessionScanner<'a> {
             .map(|e| e.into_path())
             .collect();
 
+        use std::collections::BTreeMap;
+        let mut daily_map: BTreeMap<String, DailyUsage> = BTreeMap::new();
+        let mut session_items: Vec<SessionItem> = Vec::new();
+
         for file in files {
             summary.sessions_scanned += 1;
             let session_id = session_id_from_path(&file);
@@ -121,16 +149,66 @@ impl<'a> SessionScanner<'a> {
                 Ok(t) => t,
                 Err(_) => continue, // skip corrupt files; never panic on user data
             };
+            if turns.is_empty() {
+                continue;
+            }
             summary.turns_scanned += turns.len();
-            for t in turns {
+
+            let first_ts = turns.first().map(|t| t.timestamp).unwrap_or_else(Utc::now);
+            let last_ts = turns.last().map(|t| t.timestamp).unwrap_or_else(Utc::now);
+            let mut session_tokens = 0i64;
+            let mut primary_model: Option<String> = None;
+            let mut cwd: Option<String> = None;
+
+            for t in turns.iter() {
+                session_tokens += t.total_tokens;
+                if primary_model.is_none() && t.model.is_some() {
+                    primary_model = t.model.clone();
+                }
+                if cwd.is_none() && t.cwd.is_some() {
+                    cwd = t.cwd.clone();
+                }
+
                 summary.total_input_tokens += t.input_tokens;
                 summary.total_cached_input_tokens += t.cached_input_tokens;
                 summary.total_output_tokens += t.output_tokens;
                 summary.total_tokens += t.total_tokens;
-                upsert_model(&mut summary.per_model, &t);
-                push_recent(&mut summary.recent, t, self.recent_limit);
+                upsert_model(&mut summary.per_model, t);
+                push_recent(&mut summary.recent, t.clone(), self.recent_limit);
+
+                // Group by date (YYYY-MM-DD)
+                let date_str = t.timestamp.format("%Y-%m-%d").to_string();
+                let entry = daily_map.entry(date_str.clone()).or_insert_with(|| DailyUsage {
+                    date: date_str,
+                    input_tokens: 0,
+                    cached_input_tokens: 0,
+                    output_tokens: 0,
+                    total_tokens: 0,
+                    turns_count: 0,
+                });
+                entry.input_tokens += t.input_tokens;
+                entry.cached_input_tokens += t.cached_input_tokens;
+                entry.output_tokens += t.output_tokens;
+                entry.total_tokens += t.total_tokens;
+                entry.turns_count += 1;
             }
+
+            session_items.push(SessionItem {
+                session_id,
+                file_path: file.to_string_lossy().to_string(),
+                created_at: first_ts,
+                last_updated_at: last_ts,
+                turns_count: turns.len(),
+                total_tokens: session_tokens,
+                primary_model,
+                cwd,
+            });
         }
+
+        // Sort sessions by last_updated_at desc
+        session_items.sort_by(|a, b| b.last_updated_at.cmp(&a.last_updated_at));
+        summary.sessions = session_items;
+        summary.daily_usage = daily_map.into_values().collect();
 
         // Stable order: by total tokens desc.
         summary
