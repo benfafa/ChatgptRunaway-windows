@@ -1,111 +1,62 @@
-# Codex Runway for Windows
+﻿# Codex Runway for Windows
 
-> Native Windows tray-bar app for Codex: quota, reset-credits, daily usage,
-> multi-account management, and local session inspection. The Windows port of
-> [Licoy/codex-runway](https://github.com/Licoy/codex-runway), focused on the
-> Codex panel (Grok and desktop widgets are intentionally out of scope).
+> Native Windows system tray app for Codex: quota monitoring, subscription renewal tracker, reset credits, token usage charts, multi-account management, session index repair, and local session inspection.
+>
+> 🇨🇳 **[中文说明文档 (Chinese README)](./README_zh.md)**
 
-## Why a separate project
+---
 
-The macOS original is a pure SwiftUI + AppKit app that depends on macOS-only
-APIs (NSStatusItem, NSWorkspace, keychain, sandbox widgets, app groups, etc.).
-A faithful Windows port is a different kind of beast: system tray, WebView2,
-the Windows credential store, and the Win32 filesystem. The two codebases
-share the same data shapes and the same privacy contract, not the same
-implementation.
+## ✨ Key Features
 
-## Goals
+- 🖥️ **Native System Tray Integration**: Lives in the Windows taskbar tray. One-click popover with Windows 11 Fluent Acrylic / Mica glassmorphic UI, supporting dynamic Light/Dark modes.
+- 🟢 **Hero Quota (Remaining Focus)**: Large 32px glowing Emerald typography and gradient progress gauge highlighting remaining quota % first, paired with precise countdowns (Days, Hours, Minutes).
+- 🔄 **Subscription Expiry & Cycle Projection**: Parses official JWT credentials and displays dynamic badges like `🔄 订阅有效期至 2026/9/23 · 27天9小时`, with automatic monthly renewal cycle advancement.
+- 🏥 **Session Index Health & Auto-Repair**: Real-time health monitor for `%USERPROFILE%\.codex\session_index.jsonl` (Missing, Orphan, Duplicate counts) with one-click lossless rebuilding.
+- 💬 **Recent Sessions & API-Equivalent Cost**: Natural Chinese titles, workspace directories, total token counts, and right-aligned USD equivalent cost estimations ($).
+- 👥 **Multi-Account Manager**: ChatGPT web OAuth login and `auth.json` paste/import. Atomic sync back to `%USERPROFILE%\.codex\auth.json` keeps the official Codex CLI and IDE in sync.
+- 📊 **Visual Usage Analytics**:
+  - 📅 **30-Day Activity Heatmap (GitHub style)**
+  - 📈 **Daily Token Consumption Trend**
+  - 📊 **Per-Model Token Breakdown Bar Chart**
+- 📦 **Session Backup & Restore**: One-click folder export/import of all local `.jsonl` sessions.
+- 🔒 **Privacy First (Local-Only)**: Zero tokens, credentials, or session content uploaded anywhere.
 
-- **Tray-first.** The app lives in the Windows system tray, not a window. A
-  small popover appears when you click the tray icon.
-- **Codex only.** `~/.codex/auth.json`, `~/.codex/sessions/`, and the official
-  `chatgpt.com/backend-api` endpoints. Grok is not implemented.
-- **Multi-account.** Manage, switch, and refresh multiple Codex accounts.
-  Active account is written back to `~/.codex/auth.json` atomically, so the
-  Codex CLI and IDE stay in sync.
-- **Local-first.** API-equivalent cost is computed from local session JSONL
-  logs. No session content leaves the machine.
-- **Windows 10 / 11.** Built on Tauri 2 + WebView2. Single MSI/NSIS installer.
+---
 
-## Non-goals
+## 📥 Download Installers
 
-- Grok quota, billing, CLI, or sessions.
-- Desktop widgets (Tauri does not currently support Win32 widget hosts).
-- macOS-only affordances such as the menubar extra or Notification Center.
+All latest builds are located under `dist_installers_latest/`:
 
-## Privacy
+| Installer Type | Description | Path |
+| :--- | :--- | :--- |
+| **NSIS Setup (Recommended)** | Standard installer with desktop/start-menu shortcuts | `dist_installers_latest/codex-runway-windows-nsis/Codex Runway_0.2.0_x64-setup.exe` |
+| **MSI Package (zh-CN)** | Native Windows Installer in Simplified Chinese | `dist_installers_latest/codex-runway-windows-msi/Codex Runway_0.2.0_x64_zh-CN.msi` |
+| **MSI Package (en-US)** | Native Windows Installer in English | `dist_installers_latest/codex-runway-windows-msi/Codex Runway_0.2.0_x64_en-US.msi` |
+| **Portable Binary (.exe)** | Standalone green single-file executable | `dist_installers_latest/codex-runway-windows-exe/codex-runway-windows.exe` |
 
-This project inherits the privacy contract of the macOS original:
+---
 
-- `auth.json` is read from `%USERPROFILE%\.codex\auth.json`. Multi-account
-  credentials are stored under `%USERPROFILE%\.codex-runway\accounts\<id>\auth.json`
-  (directory `D`, file `D:` for the current user only).
-- The account index file `index.json` never contains tokens.
-- Invalid or mock credentials are never written back to the official
-  `auth.json`.
-- "Reset today?" (when implemented) only downloads the public status feed.
-- API-equivalent cost is computed locally from session JSONL logs. Derived
-  data lives under `%USERPROFILE%\.codex-runway\`. Nothing is uploaded.
-- Update checks request only version information.
+## 🛠️ Local Development
 
-## Requirements
+### Requirements
 
-- Windows 10 (1809) or Windows 11 with WebView2 Runtime installed.
-  Windows 11 has WebView2 preinstalled; Windows 10 typically does not. The
-  installer will offer to fetch it on first launch if missing.
-- Codex CLI / IDE installed and used on this machine is recommended.
-- An existing `%USERPROFILE%\.codex\auth.json`, or you can add an account
-  from inside the app (paste, import, browser sign-in).
-
-## Run locally
-
-> Requires Node 20+, pnpm 9+, Rust 1.77+, and the Tauri 2 prerequisites for
-> Windows: `Microsoft Visual C++ Build Tools` and the `WebView2` SDK.
+- Windows 10 (1809+) or Windows 11
+- WebView2 Runtime installed
+- Node.js 20+, pnpm 9+, Rust 1.77+
 
 ```bash
+# Install dependencies
 pnpm install
+
+# Start development popover with hot reload
 pnpm tauri dev
-```
 
-`pnpm tauri dev` builds and launches the app with hot reload. The dev
-instance uses a separate identifier (`com.github.codex-runway-windows.dev`)
-so it can run side by side with a release install.
-
-## Build a release installer
-
-```bash
+# Build release bundle
 pnpm tauri build
 ```
 
-Output:
+---
 
-- `src-tauri/target/release/CodexRunway.exe` — single binary.
-- `src-tauri/target/release/bundle/msi/CodexRunway_*.msi` — Windows
-  installer.
-- `src-tauri/target/release/bundle/nsis/CodexRunway_*.exe` — NSIS
-  installer.
+## 📄 License
 
-## Self-check
-
-```bash
-pnpm tauri dev -- --self-check
-```
-
-The self-check reads local state only and makes no network request. It
-prints redacted Codex diagnostics plus credential status and account
-identity. Tokens and API keys are never printed.
-
-## Data sources
-
-- **Quota / reset credits / official token usage**: signed-in requests use
-  the local credential against the official `chatgpt.com/backend-api`
-  endpoints (`wham/usage`, `wham/rate-limit-reset-credits`,
-  `wham/profiles/me`).
-- **API-equivalent cost / local sessions**: computed from local
-  `%USERPROFILE%\.codex\sessions\*.jsonl` turn-complete usage using the
-  official OpenAI Text API price book. Unknown models are not invented as
-  exact costs.
-
-## License
-
-AGPL-3.0, matching the upstream project.
+MIT License
