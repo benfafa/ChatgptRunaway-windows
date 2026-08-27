@@ -494,7 +494,9 @@ pub fn hide_popover(app: &AppHandle) {
 #[cfg(target_os = "windows")]
 fn tray_position(app: &AppHandle) -> tauri::Result<tauri::PhysicalPosition<i32>> {
     if let Some(tray) = app.tray_by_id("main") {
-        if let Some(rect) = tray.rect() {
+        // Tauri 2 on Windows returns `Result<Option<Rect>>`; on macOS it's
+        // `Option<Rect>`. The `.ok().flatten()` pattern works on both.
+        if let Some(rect) = tray.rect().ok().flatten() {
             // Center the popover horizontally on the tray icon, then drop it
             // above the taskbar. The window is anchored to the cursor's
             // screen, so we use the icon's left edge.

@@ -15,7 +15,6 @@
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::{Duration, Instant};
 
 use base64::Engine;
@@ -482,6 +481,7 @@ fn decode_plan_type(jwt: Option<&str>) -> Option<String> {
 mod tests {
     use super::*;
     use std::net::TcpStream;
+    use std::thread;
 
     #[test]
     fn pkce_challenge_matches_sha256() {
