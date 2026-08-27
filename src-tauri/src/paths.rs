@@ -97,27 +97,6 @@ pub fn ensure_dir_restricted(path: &Path) -> Result<(), AppError> {
         let perms = std::fs::Permissions::from_mode(0o700);
         std::fs::set_permissions(path, perms)?;
     }
-    #[cfg(windows)]
-    {
-        // Best-effort: deny inheritance + grant current user only. We don't
-        // fail if ACL editing is not permitted (CI sandboxes, non-NTFS, etc.).
-        let _ = set_owner_only_acl(path);
-    }
-    Ok(())
-}
-
-#[cfg(windows)]
-fn set_owner_only_acl(path: &Path) -> std::io::Result<()> {
-    use std::process::Command;
-    // icacls can grant only the current user; non-fatal if it errors.
-    let user = std::env::var("USERNAME").unwrap_or_else(|_| "%USERNAME%".to_string());
-    let _ = Command::new("icacls")
-        .arg(path)
-        .arg("/inheritance:r")
-        .arg("/grant:r")
-        .arg(format!("{user}:(OI)(CI)F"))
-        .arg("/T")
-        .output();
     Ok(())
 }
 
@@ -145,18 +124,21 @@ pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), AppError> {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600));
     }
-    if path.exists() {
-        // On Windows, std::fs::rename is atomic if the destination exists on
-        // the same volume. We use replace via remove+rename to handle ACLs.
-        #[cfg(windows)]
-        {
-            std::fs::rename(&tmp, path)?;
+    #[cfg(windows)]
+    {
+        // On Windows, if target exists, std::fs::rename will fail with ERROR_ALREADY_EXISTS
+        // or access denied unless replaced. If target exists, try remove first or fallback to write.
+        if path.exists() {
+            let _ = std::fs::remove_file(path);
         }
-        #[cfg(not(windows))]
-        {
-            std::fs::rename(&tmp, path)?;
+        if let Err(_) = std::fs::rename(&tmp, path) {
+            // Fallback direct write in case rename is blocked by antivirus or volume lock
+            std::fs::write(path, data)?;
+            let _ = std::fs::remove_file(&tmp);
         }
-    } else {
+    }
+    #[cfg(not(windows))]
+    {
         std::fs::rename(&tmp, path)?;
     }
     Ok(())
