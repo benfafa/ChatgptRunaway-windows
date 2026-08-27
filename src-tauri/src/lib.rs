@@ -113,6 +113,11 @@ fn upsert_account(
     let now = chrono::Utc::now();
     let email = crate::account::email_from(&auth);
     let subject = crate::account::subject_id_from(&auth);
+    let sub_until = auth
+        .tokens
+        .as_ref()
+        .and_then(|t| t.id_token.as_deref())
+        .and_then(crate::account::decode_jwt_subscription_until);
     let row = AccountRow {
         id: id.clone(),
         label: label
@@ -122,6 +127,7 @@ fn upsert_account(
         subject_id: subject,
         account_id: auth.account_id(),
         plan_type: auth.plan_type.clone(),
+        subscription_active_until: sub_until,
         auth_mode: if auth.is_api_key() {
             AccountAuthMode::ApiKey
         } else if auth.is_oauth() {
@@ -544,6 +550,11 @@ async fn oauth_finish(
     store.save_credential(&id, &auth)?;
     let mut idx = store.load_index()?;
     let now = chrono::Utc::now();
+    let sub_until = auth
+        .tokens
+        .as_ref()
+        .and_then(|t| t.id_token.as_deref())
+        .and_then(crate::account::decode_jwt_subscription_until);
     let row = crate::account::AccountRow {
         id: id.clone(),
         label,
@@ -551,6 +562,7 @@ async fn oauth_finish(
         subject_id: crate::account::subject_id_from(&auth),
         account_id: auth.account_id(),
         plan_type: auth.plan_type.clone(),
+        subscription_active_until: sub_until,
         auth_mode: if auth.is_api_key() {
             AccountAuthMode::ApiKey
         } else {
