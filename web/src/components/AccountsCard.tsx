@@ -1,4 +1,4 @@
-﻿import type { AccountIndex, AccountRow } from "../api";
+import type { AccountIndex, AccountRow } from "../api";
 import { translations } from "../i18n";
 
 interface Props {
@@ -23,8 +23,6 @@ export function AccountsCard({ accounts, t, onActivate, onDelete, onAddClick }: 
       </div>
     );
   }
-
-  const active = accounts.accounts.find((a) => a.id === accounts.active_id) || accounts.accounts[0];
 
   return (
     <div className="card glass-panel">
