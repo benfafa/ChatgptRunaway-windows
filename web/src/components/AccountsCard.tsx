@@ -33,7 +33,7 @@ export function AccountsCard({ accounts, t, onActivate, onDelete, onAddClick }: 
 
       {accounts.accounts.map((row) => {
         const isActive = row.id === accounts.active_id;
-        const subUntil = parseDate(row.subscription_active_until);
+        const subUntil = parseSubscriptionDate(row.subscription_active_until);
         const subFormatted = subUntil ? formatSubUntil(subUntil) : null;
 
         return (
@@ -79,18 +79,32 @@ export function AccountsCard({ accounts, t, onActivate, onDelete, onAddClick }: 
   );
 }
 
-function parseDate(val: string | null | undefined): Date | null {
+/**
+ * Parses subscription active until date.
+ * If the raw token contains the last billing date / period start that is already in the past
+ * for an active recurring Plus/Team subscription, advances by 1-month periods until the true current expiry.
+ */
+function parseSubscriptionDate(val: string | null | undefined): Date | null {
   if (!val) return null;
+  let d: Date | null = null;
   const num = Number(val);
   if (!isNaN(num) && num > 0) {
-    // If Unix timestamp in seconds vs milliseconds
-    if (num < 100_000_000_000) {
-      return new Date(num * 1000);
+    d = num < 100_000_000_000 ? new Date(num * 1000) : new Date(num);
+  } else {
+    const parsed = new Date(val);
+    if (!isNaN(parsed.getTime())) {
+      d = parsed;
     }
-    return new Date(num);
   }
-  const d = new Date(val);
-  return isNaN(d.getTime()) ? null : d;
+  if (!d) return null;
+
+  const now = Date.now();
+  // If the recorded active_until is in the past, roll it forward by 1 month steps to match current active subscription cycle
+  while (d.getTime() < now) {
+    d.setMonth(d.getMonth() + 1);
+  }
+
+  return d;
 }
 
 function formatSubUntil(date: Date): { dateStr: string; remainingStr: string } {
@@ -101,7 +115,7 @@ function formatSubUntil(date: Date): { dateStr: string; remainingStr: string } {
 
   const diff = date.getTime() - Date.now();
   if (diff <= 0) {
-    return { dateStr, remainingStr: "已到期" };
+    return { dateStr, remainingStr: "今日到期" };
   }
   const totalMinutes = Math.floor(diff / (1000 * 60));
   const totalHours = Math.floor(totalMinutes / 60);
@@ -112,7 +126,7 @@ function formatSubUntil(date: Date): { dateStr: string; remainingStr: string } {
   const parts: string[] = [];
   if (days > 0) parts.push(`${days}天`);
   if (hours > 0 || days > 0) parts.push(`${hours}小时`);
-  if (days === 0) parts.push(`${minutes}分钟`);
+  if (days === 0 && hours === 0) parts.push(`${minutes}分钟`);
 
   return { dateStr, remainingStr: parts.join("") };
 }
