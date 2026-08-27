@@ -1,4 +1,4 @@
-import type { AccountIndex, AccountRow } from "../api";
+﻿import type { AccountIndex, AccountRow } from "../api";
 import { translations } from "../i18n";
 
 interface Props {
@@ -33,7 +33,7 @@ export function AccountsCard({ accounts, t, onActivate, onDelete, onAddClick }: 
 
       {accounts.accounts.map((row) => {
         const isActive = row.id === accounts.active_id;
-        const subUntil = row.subscription_active_until ? new Date(row.subscription_active_until) : null;
+        const subUntil = parseDate(row.subscription_active_until);
         const subFormatted = subUntil ? formatSubUntil(subUntil) : null;
 
         return (
@@ -62,7 +62,7 @@ export function AccountsCard({ accounts, t, onActivate, onDelete, onAddClick }: 
               </div>
             </div>
 
-            {/* Subscription active until pill banner (like original macOS app) */}
+            {/* Subscription active until pill banner */}
             {subFormatted && (
               <div className="sub-badge-banner">
                 <span className="sub-badge-icon">🔄</span>
@@ -79,6 +79,20 @@ export function AccountsCard({ accounts, t, onActivate, onDelete, onAddClick }: 
   );
 }
 
+function parseDate(val: string | null | undefined): Date | null {
+  if (!val) return null;
+  const num = Number(val);
+  if (!isNaN(num) && num > 0) {
+    // If Unix timestamp in seconds vs milliseconds
+    if (num < 100_000_000_000) {
+      return new Date(num * 1000);
+    }
+    return new Date(num);
+  }
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 function formatSubUntil(date: Date): { dateStr: string; remainingStr: string } {
   const y = date.getFullYear();
   const m = date.getMonth() + 1;
@@ -87,15 +101,18 @@ function formatSubUntil(date: Date): { dateStr: string; remainingStr: string } {
 
   const diff = date.getTime() - Date.now();
   if (diff <= 0) {
-    return { dateStr, remainingStr: "已过期" };
+    return { dateStr, remainingStr: "已到期" };
   }
-  const totalHours = Math.floor(diff / (1000 * 60 * 60));
+  const totalMinutes = Math.floor(diff / (1000 * 60));
+  const totalHours = Math.floor(totalMinutes / 60);
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
+  const minutes = totalMinutes % 60;
 
   const parts: string[] = [];
   if (days > 0) parts.push(`${days}天`);
   if (hours > 0 || days > 0) parts.push(`${hours}小时`);
+  if (days === 0) parts.push(`${minutes}分钟`);
 
   return { dateStr, remainingStr: parts.join("") };
 }

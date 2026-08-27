@@ -274,10 +274,39 @@ struct ResetCreditRaw {
     id: Option<String>,
     #[serde(default)]
     status: Option<String>,
-    #[serde(default, rename = "created_at", deserialize_with = "deserialize_flexible_i64")]
-    created_at: Option<i64>,
-    #[serde(default, rename = "expires_at", deserialize_with = "deserialize_flexible_i64")]
-    expires_at: Option<i64>,
+    #[serde(default, rename = "created_at", deserialize_with = "deserialize_flexible_date")]
+    created_at: Option<DateTime<Utc>>,
+    #[serde(default, rename = "expires_at", deserialize_with = "deserialize_flexible_date")]
+    expires_at: Option<DateTime<Utc>>,
+}
+
+fn deserialize_flexible_date<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match opt {
+        Some(serde_json::Value::Number(n)) => {
+            if let Some(ts) = n.as_i64() {
+                Ok(DateTime::from_timestamp(ts, 0))
+            } else if let Some(ts) = n.as_f64() {
+                Ok(DateTime::from_timestamp(ts as i64, 0))
+            } else {
+                Ok(None)
+            }
+        }
+        Some(serde_json::Value::String(s)) => {
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(&s) {
+                Ok(Some(dt.with_timezone(&Utc)))
+            } else if let Ok(ts) = s.parse::<i64>() {
+                Ok(DateTime::from_timestamp(ts, 0))
+            } else {
+                Ok(None)
+            }
+        }
+        Some(serde_json::Value::Null) | None => Ok(None),
+        _ => Ok(None),
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -302,14 +331,14 @@ impl ResetCreditsSnapshot {
             .credits
             .into_iter()
             .map(|c| {
-                let expires = c.expires_at.and_then(|t| DateTime::from_timestamp(t, 0));
+                let expires = c.expires_at;
                 let remaining = expires
                     .map(|e| (e - now).num_seconds().max(0))
                     .unwrap_or(0);
                 ResetCredit {
                     id: c.id,
                     status: c.status.unwrap_or_else(|| "unknown".to_string()),
-                    created_at: c.created_at.and_then(|t| DateTime::from_timestamp(t, 0)),
+                    created_at: c.created_at,
                     expires_at: expires,
                     remaining_seconds: remaining,
                 }

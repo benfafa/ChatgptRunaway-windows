@@ -211,21 +211,36 @@ pub(crate) fn decode_jwt_subscription_until(jwt: &str) -> Option<String> {
         .decode(parts[1])
         .ok()?;
     let v: serde_json::Value = serde_json::from_slice(&payload).ok()?;
-    let auth = v.get("https://api.openai.com/auth")?;
+    
+    // Check inside https://api.openai.com/auth object
+    if let Some(auth) = v.get("https://api.openai.com/auth") {
+        if let Some(s) = auth.get("chatgpt_subscription_active_until").and_then(|x| x.as_str()) {
+            return Some(s.to_string());
+        }
+        if let Some(ts) = auth.get("chatgpt_subscription_active_until").and_then(|x| x.as_i64()) {
+            if let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) {
+                return Some(dt.to_rfc3339());
+            }
+        }
+        if let Some(ts) = auth.get("chatgpt_subscription_active_until").and_then(|x| x.as_f64()) {
+            if let Some(dt) = chrono::DateTime::from_timestamp(ts as i64, 0) {
+                return Some(dt.to_rfc3339());
+            }
+        }
+    }
 
-    if let Some(s) = auth.get("chatgpt_subscription_active_until").and_then(|x| x.as_str()) {
-        return Some(s.to_string());
-    }
-    if let Some(ts) = auth.get("chatgpt_subscription_active_until").and_then(|x| x.as_i64()) {
-        if let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) {
-            return Some(dt.to_rfc3339());
+    // Check root claims (chatgpt_subscription_active_until, subscription_active_until, plan_active_until, exp)
+    for key in &["chatgpt_subscription_active_until", "subscription_active_until", "plan_active_until"] {
+        if let Some(s) = v.get(*key).and_then(|x| x.as_str()) {
+            return Some(s.to_string());
+        }
+        if let Some(ts) = v.get(*key).and_then(|x| x.as_i64()) {
+            if let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) {
+                return Some(dt.to_rfc3339());
+            }
         }
     }
-    if let Some(ts) = auth.get("chatgpt_subscription_active_until").and_then(|x| x.as_f64()) {
-        if let Some(dt) = chrono::DateTime::from_timestamp(ts as i64, 0) {
-            return Some(dt.to_rfc3339());
-        }
-    }
+
     None
 }
 
