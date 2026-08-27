@@ -27,6 +27,7 @@ pub struct AccountRow {
     pub subject_id: Option<String>,
     pub account_id: Option<String>,
     pub plan_type: Option<String>,
+    pub subscription_active_until: Option<String>,
     pub auth_mode: AccountAuthMode,
     pub added_at: DateTime<Utc>,
     pub last_used_at: Option<DateTime<Utc>>,
@@ -75,7 +76,8 @@ impl<'a> AccountStore<'a> {
             }
             let needs = row.subject_id.is_none()
                 || row.account_id.is_none()
-                || row.email.is_none();
+                || row.email.is_none()
+                || row.subscription_active_until.is_none();
             if !needs {
                 continue;
             }
@@ -89,6 +91,13 @@ impl<'a> AccountStore<'a> {
                     }
                     if row.email.is_none() {
                         row.email = email_from(&auth);
+                    }
+                    if row.subscription_active_until.is_none() {
+                        row.subscription_active_until = auth
+                            .tokens
+                            .as_ref()
+                            .and_then(|t| t.id_token.as_deref())
+                            .and_then(decode_jwt_subscription_until);
                     }
                 }
                 Err(AppError::Account(msg)) if msg == "credential_missing" => {
@@ -195,6 +204,19 @@ fn decode_jwt_email(jwt: &str) -> Option<String> {
     v.get("email").and_then(|s| s.as_str()).map(String::from)
 }
 
+fn decode_jwt_subscription_until(jwt: &str) -> Option<String> {
+    let parts: Vec<&str> = jwt.split('.').collect();
+    if parts.len() < 2 { return None; }
+    let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(parts[1])
+        .ok()?;
+    let v: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+    v.get("https://api.openai.com/auth")
+        .and_then(|a| a.get("chatgpt_subscription_active_until"))
+        .and_then(|s| s.as_str())
+        .map(String::from)
+}
+
 /// Best-effort: import the current `~/.codex/auth.json` into the library if
 /// it is not already present. Returns the existing or newly-created row.
 pub fn import_official_if_absent(paths: &Paths) -> AppResult<Option<AccountRow>> {
@@ -214,6 +236,7 @@ pub fn import_official_if_absent(paths: &Paths) -> AppResult<Option<AccountRow>>
     if idx.accounts.iter().any(|r| r.id == id) {
         return Ok(idx.accounts.into_iter().find(|r| r.id == id));
     }
+    let sub_until = auth.tokens.as_ref().and_then(|t| t.id_token.as_deref()).and_then(decode_jwt_subscription_until);
     let row = AccountRow {
         id: id.clone(),
         label: email_from(&auth).unwrap_or_else(|| id.clone()),
@@ -221,6 +244,7 @@ pub fn import_official_if_absent(paths: &Paths) -> AppResult<Option<AccountRow>>
         subject_id: subject_id_from(&auth),
         account_id: auth.account_id(),
         plan_type: auth.plan_type.clone(),
+        subscription_active_until: sub_until,
         auth_mode: if auth.is_api_key() {
             AccountAuthMode::ApiKey
         } else if auth.is_oauth() {

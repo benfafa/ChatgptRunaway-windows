@@ -6,19 +6,33 @@ const STORAGE_KEY = "codex_runway_lang";
 
 export const translations = {
   "zh-CN": {
-    appTitle: "Codex Runway 监控",
+    appTitle: "Codex Runway",
     activeBadge: "当前活跃",
     refreshTitle: "刷新",
     refreshing: "正在刷新…",
     localOnlyFooter: "纯本地运行 • 不上传任何 Token 或隐私凭据",
+    settings: "设置",
+    quit: "退出",
     
-    // Accounts Card
+    // Accounts Card & Subscription
     accountsTitle: "账号管理",
     noAccounts: "暂无 Codex 账号。",
     addAccountBtn: "添加账号",
     reauthRequired: "需重新授权",
     activateBtn: "切换使用",
     removeBtn: "从列表中移除",
+    subscriptionValidUntil: "订阅有效期至",
+    
+    // Session Repair
+    sessionRepairTitle: "会话修复",
+    sessionRepairStatus: "{missing} 缺失, {orphan} 孤立, {duplicate} 重复",
+    sessionRepairAction: "修复索引",
+    sessionRepairing: "正在修复索引…",
+    sessionRepairSuccess: "已成功重建并修复 {count} 条会话索引！",
+    
+    // Recent Sessions
+    recentSessionsTitle: "最近会话",
+    recentlyActive: "最近活跃",
     
     // Quota Card & Estimations
     quotaTitle: "用量配额",
@@ -58,7 +72,7 @@ export const translations = {
     sessionManagerTitle: "会话历史与管理",
     showSessionsList: "查看会话列表 ({count})",
     hideSessionsList: "收起会话列表",
-    searchSessionsPlaceholder: "搜索工作目录、会话 ID 或模型…",
+    searchSessionsPlaceholder: "搜索工作目录、会话标题或模型…",
     backupBtn: "📦 备份会话",
     restoreBtn: "📥 还原会话",
     backupSuccess: "成功备份 {count} 个文件至 {path}",
@@ -100,14 +114,28 @@ export const translations = {
     refreshTitle: "Refresh",
     refreshing: "Refreshing…",
     localOnlyFooter: "Local-only • no tokens or secrets uploaded",
+    settings: "Settings",
+    quit: "Quit",
     
-    // Accounts Card
+    // Accounts Card & Subscription
     accountsTitle: "Accounts",
     noAccounts: "No Codex accounts in the library.",
     addAccountBtn: "Add account",
     reauthRequired: "re-auth required",
     activateBtn: "Activate",
     removeBtn: "Remove",
+    subscriptionValidUntil: "Subscription valid until",
+    
+    // Session Repair
+    sessionRepairTitle: "Session Repair",
+    sessionRepairStatus: "{missing} missing, {orphan} orphan, {duplicate} duplicate",
+    sessionRepairAction: "Repair Index",
+    sessionRepairing: "Repairing index…",
+    sessionRepairSuccess: "Successfully rebuilt and repaired {count} session index items!",
+    
+    // Recent Sessions
+    recentSessionsTitle: "Recent Sessions",
+    recentlyActive: "Recent",
     
     // Quota Card & Estimations
     quotaTitle: "Quota",
@@ -147,7 +175,7 @@ export const translations = {
     sessionManagerTitle: "Session Management",
     showSessionsList: "Show Sessions ({count})",
     hideSessionsList: "Hide Sessions",
-    searchSessionsPlaceholder: "Search by directory, session ID, or model…",
+    searchSessionsPlaceholder: "Search by title, directory, or model…",
     backupBtn: "📦 Backup Sessions",
     restoreBtn: "📥 Restore Sessions",
     backupSuccess: "Successfully backed up {count} files to {path}",

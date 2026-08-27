@@ -16,6 +16,7 @@ export interface AccountRow {
   subject_id: string | null;
   account_id: string | null;
   plan_type: string | null;
+  subscription_active_until?: string | null;
   auth_mode: AccountAuthMode;
   added_at: string;
   last_used_at: string | null;
@@ -93,13 +94,31 @@ export interface DailyUsage {
 
 export interface SessionItem {
   session_id: string;
+  title: string;
   file_path: string;
   created_at: string;
   last_updated_at: string;
   turns_count: number;
+  input_tokens: number;
+  cached_input_tokens: number;
+  output_tokens: number;
   total_tokens: number;
+  estimated_cost_usd: string;
   primary_model: string | null;
   cwd: string | null;
+}
+
+export interface SessionIndexHealth {
+  missing_count: number;
+  orphan_count: number;
+  duplicate_count: number;
+  total_indexed: number;
+  total_files: number;
+}
+
+export interface SessionIndexRepairResult {
+  repaired_count: number;
+  index_path: string;
 }
 
 export interface UsageSummary {
@@ -201,6 +220,10 @@ export const api = {
     invoke<BackupResult>("backup_sessions", { targetPath }),
   restoreSessions: (sourcePath: string) =>
     invoke<RestoreResult>("restore_sessions", { sourcePath }),
+  checkSessionIndexHealth: () =>
+    invoke<SessionIndexHealth>("check_session_index_health"),
+  repairSessionIndex: () =>
+    invoke<SessionIndexRepairResult>("repair_session_index"),
   computeApiCost: (since?: string) =>
     invoke<ApiCostSummary>("compute_api_cost", { since: since ?? null }),
 

@@ -1,11 +1,22 @@
 ﻿import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { api, type AccountIndex, type QuotaSnapshot, type ResetCreditsSnapshot, type UsageSummary, type AccountRow, type ApiCostSummary } from "./api";
+import {
+  api,
+  type AccountIndex,
+  type QuotaSnapshot,
+  type ResetCreditsSnapshot,
+  type UsageSummary,
+  type AccountRow,
+  type ApiCostSummary,
+  type SessionIndexHealth,
+} from "./api";
 import { useLanguage } from "./i18n";
 import { AccountsCard } from "./components/AccountsCard";
 import { QuotaCard } from "./components/QuotaCard";
 import { ResetCreditsCard } from "./components/ResetCreditsCard";
+import { SessionRepairCard } from "./components/SessionRepairCard";
+import { RecentSessionsCard } from "./components/RecentSessionsCard";
 import { VisualUsageCard } from "./components/VisualUsageCard";
 import { CostCard } from "./components/CostCard";
 import { AddAccountDialog } from "./components/AddAccountDialog";
@@ -17,6 +28,7 @@ export default function App() {
   const [reset, setReset] = useState<ResetCreditsSnapshot | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [cost, setCost] = useState<ApiCostSummary | null>(null);
+  const [health, setHealth] = useState<SessionIndexHealth | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -36,7 +48,7 @@ export default function App() {
 
   useEffect(() => {
     if (toast) {
-      const timer = setTimeout(() => setToast(null), 3500);
+      const timer = setTimeout(() => setToast(null), 4000);
       return () => clearTimeout(timer);
     }
   }, [toast]);
@@ -45,17 +57,20 @@ export default function App() {
     setRefreshing(true);
     setError(null);
     try {
-      const [idx, usage, cost] = await Promise.all([
+      const [idx, usage, cost, healthData] = await Promise.all([
         api.listAccounts(),
         api.scanLocalSessions(),
         api.computeApiCost().catch((e) => {
           console.warn("cost calc failed", e);
           return null;
         }),
+        api.checkSessionIndexHealth().catch(() => null),
       ]);
       setAccounts(idx);
       setUsage(usage);
       setCost(cost);
+      setHealth(healthData);
+
       if (idx.active_id) {
         await fetchFor(idx.active_id);
       } else {
@@ -83,6 +98,16 @@ export default function App() {
       }
     } catch (e) {
       setError(String(e));
+    }
+  }
+
+  async function handleRepairIndex() {
+    try {
+      const res = await api.repairSessionIndex();
+      setToast(t.sessionRepairSuccess.replace("{count}", String(res.repaired_count)));
+      await refresh();
+    } catch (e) {
+      setError(`修复失败: ${e}`);
     }
   }
 
@@ -160,15 +185,12 @@ export default function App() {
     }
   }
 
-  const active = accounts?.accounts.find((a) => a.id === accounts.active_id);
-
   return (
     <div className="app">
       <header className="app__header">
         <div className="app__title">
           <span className="app__title-dot" />
           <span>{t.appTitle}</span>
-          {active ? <span className="tag tag--ok">{active.label}</span> : null}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <button
@@ -218,6 +240,26 @@ export default function App() {
 
         {quota ? <QuotaCard quota={quota} t={t} /> : null}
         {reset ? <ResetCreditsCard reset={reset} t={t} /> : null}
+
+        {/* Session Index Health & Repair Card */}
+        {health ? (
+          <SessionRepairCard
+            health={health}
+            t={t}
+            onRepair={handleRepairIndex}
+            onRefresh={refresh}
+          />
+        ) : null}
+
+        {/* Recent Sessions with Title, Tokens & Estimated Cost */}
+        {usage && usage.sessions && usage.sessions.length > 0 ? (
+          <RecentSessionsCard
+            usage={usage}
+            t={t}
+            onRefresh={refresh}
+          />
+        ) : null}
+
         {usage ? (
           <VisualUsageCard
             usage={usage}
@@ -226,6 +268,7 @@ export default function App() {
             onRestore={handleRestore}
           />
         ) : null}
+
         {cost ? <CostCard cost={cost} t={t} /> : null}
       </main>
 

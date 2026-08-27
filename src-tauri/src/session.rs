@@ -43,11 +43,16 @@ pub struct DailyUsage {
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionItem {
     pub session_id: String,
+    pub title: String,
     pub file_path: String,
     pub created_at: DateTime<Utc>,
     pub last_updated_at: DateTime<Utc>,
     pub turns_count: usize,
+    pub input_tokens: i64,
+    pub cached_input_tokens: i64,
+    pub output_tokens: i64,
     pub total_tokens: i64,
+    pub estimated_cost_usd: String,
     pub primary_model: Option<String>,
     pub cwd: Option<String>,
 }
@@ -142,10 +147,13 @@ impl<'a> SessionScanner<'a> {
         let mut daily_map: BTreeMap<String, DailyUsage> = BTreeMap::new();
         let mut session_items: Vec<SessionItem> = Vec::new();
 
+        // Build a lookup map from session_index.jsonl if present
+        let index_titles = load_session_index_titles(self.paths.codex_home.join("session_index.jsonl"));
+
         for file in files {
             summary.sessions_scanned += 1;
             let session_id = session_id_from_path(&file);
-            let turns = match parse_session_file(&file, &session_id) {
+            let (turns, file_title) = match parse_session_file(&file, &session_id) {
                 Ok(t) => t,
                 Err(_) => continue, // skip corrupt files; never panic on user data
             };
@@ -157,16 +165,33 @@ impl<'a> SessionScanner<'a> {
             let first_ts = turns.first().map(|t| t.timestamp).unwrap_or_else(Utc::now);
             let last_ts = turns.last().map(|t| t.timestamp).unwrap_or_else(Utc::now);
             let mut session_tokens = 0i64;
+            let mut session_input = 0i64;
+            let mut session_cached = 0i64;
+            let mut session_output = 0i64;
+            let mut session_cost = rust_decimal::Decimal::ZERO;
             let mut primary_model: Option<String> = None;
             let mut cwd: Option<String> = None;
 
             for t in turns.iter() {
                 session_tokens += t.total_tokens;
+                session_input += t.input_tokens;
+                session_cached += t.cached_input_tokens;
+                session_output += t.output_tokens;
+
                 if primary_model.is_none() && t.model.is_some() {
                     primary_model = t.model.clone();
                 }
                 if cwd.is_none() && t.cwd.is_some() {
                     cwd = t.cwd.clone();
+                }
+
+                // Calculate turn cost
+                if let Some(m_str) = t.model.as_deref() {
+                    let m = crate::pricing::Model::classify(m_str);
+                    let usage: crate::session::TokenUsage = t.into();
+                    if let Some(c) = crate::pricing::cost_for_turn(m, &usage) {
+                        session_cost += c;
+                    }
                 }
 
                 summary.total_input_tokens += t.input_tokens;
@@ -193,13 +218,30 @@ impl<'a> SessionScanner<'a> {
                 entry.turns_count += 1;
             }
 
+            let title = index_titles
+                .get(&session_id)
+                .cloned()
+                .or(file_title)
+                .or_else(|| {
+                    cwd.as_deref()
+                        .and_then(|c| Path::new(c).file_name())
+                        .and_then(|s| s.to_str())
+                        .map(String::from)
+                })
+                .unwrap_or_else(|| format!("Session {}", &session_id[..session_id.len().min(8)]));
+
             session_items.push(SessionItem {
                 session_id,
+                title,
                 file_path: file.to_string_lossy().to_string(),
                 created_at: first_ts,
                 last_updated_at: last_ts,
                 turns_count: turns.len(),
+                input_tokens: session_input,
+                cached_input_tokens: session_cached,
+                output_tokens: session_output,
                 total_tokens: session_tokens,
+                estimated_cost_usd: format!("{:.4}", session_cost),
                 primary_model,
                 cwd,
             });
@@ -218,6 +260,27 @@ impl<'a> SessionScanner<'a> {
     }
 }
 
+fn load_session_index_titles(path: PathBuf) -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    if let Ok(raw) = std::fs::read_to_string(path) {
+        for line in raw.lines() {
+            let line = line.trim();
+            if line.is_empty() { continue; }
+            if let Ok(v) = serde_json::from_str::<Value>(line) {
+                if let (Some(id), Some(name)) = (
+                    v.get("id").and_then(|x| x.as_str()),
+                    v.get("thread_name").and_then(|x| x.as_str()),
+                ) {
+                    if !name.trim().is_empty() {
+                        map.insert(id.to_string(), name.trim().to_string());
+                    }
+                }
+            }
+        }
+    }
+    map
+}
+
 fn session_id_from_path(p: &Path) -> String {
     // %USERPROFILE%\.codex\sessions\YYYY\MM\DD\<uuid>.jsonl
     // We surface the UUID stem; it's the only stable id we have.
@@ -227,11 +290,12 @@ fn session_id_from_path(p: &Path) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
-fn parse_session_file(path: &Path, session_id: &str) -> AppResult<Vec<SessionTurn>> {
+fn parse_session_file(path: &Path, session_id: &str) -> AppResult<(Vec<SessionTurn>, Option<String>)> {
     let raw = std::fs::read_to_string(path)?;
     let mut turns = Vec::new();
     let mut current_model: Option<String> = None;
     let mut current_cwd: Option<String> = None;
+    let mut first_user_message: Option<String> = None;
 
     for line in raw.lines() {
         let line = line.trim();
@@ -241,6 +305,23 @@ fn parse_session_file(path: &Path, session_id: &str) -> AppResult<Vec<SessionTur
         let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
         let ty = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
         match ty {
+            "response_item" | "event_msg" => {
+                if first_user_message.is_none() {
+                    if let Some(payload) = v.get("payload") {
+                        if let Some(content) = payload.get("content").and_then(|c| c.as_array()) {
+                            for item in content {
+                                if let Some(txt) = item.get("text").and_then(|t| t.as_str()) {
+                                    let cleaned = txt.trim().lines().next().unwrap_or("").trim();
+                                    if !cleaned.is_empty() {
+                                        first_user_message = Some(cleaned.chars().take(40).collect());
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             "turn_context" => {
                 if let Some(payload) = v.get("payload") {
                     current_model = payload
@@ -295,7 +376,7 @@ fn parse_session_file(path: &Path, session_id: &str) -> AppResult<Vec<SessionTur
             _ => {}
         }
     }
-    Ok(turns)
+    Ok((turns, first_user_message))
 }
 
 fn parse_timestamp(v: &Value) -> DateTime<Utc> {

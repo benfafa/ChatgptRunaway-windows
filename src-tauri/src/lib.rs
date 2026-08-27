@@ -314,9 +314,97 @@ fn restore_sessions(state: State<'_, AppState>, source_path: String) -> AppResul
             }
         }
     }
-    Ok(RestoreResult {
-        files_restored: restored,
-        dest_dir: dest.to_string_lossy().to_string(),
+#[derive(Debug, Serialize)]
+pub struct SessionIndexHealth {
+    pub missing_count: usize,
+    pub orphan_count: usize,
+    pub duplicate_count: usize,
+    pub total_indexed: usize,
+    pub total_files: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SessionIndexRepairResult {
+    pub repaired_count: usize,
+    pub index_path: String,
+}
+
+#[tauri::command]
+fn check_session_index_health(state: State<'_, AppState>) -> AppResult<SessionIndexHealth> {
+    let sessions_dir = state.paths.sessions_dir();
+    let index_file = state.paths.codex_home.join("session_index.jsonl");
+
+    let mut indexed_ids = std::collections::HashSet::new();
+    let mut duplicates = 0;
+    let mut total_indexed = 0;
+
+    if index_file.exists() {
+        if let Ok(raw) = std::fs::read_to_string(&index_file) {
+            for line in raw.lines() {
+                let line = line.trim();
+                if line.is_empty() { continue; }
+                total_indexed += 1;
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(line) {
+                    if let Some(id) = v.get("id").and_then(|x| x.as_str()) {
+                        if !indexed_ids.insert(id.to_string()) {
+                            duplicates += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut file_ids = std::collections::HashSet::new();
+    if sessions_dir.exists() {
+        for entry in walkdir::WalkDir::new(&sessions_dir).into_iter().filter_map(|e| e.ok()) {
+            let path = entry.path();
+            if path.is_file() && path.extension().map(|s| s.eq_ignore_ascii_case("jsonl")).unwrap_or(false) {
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    file_ids.insert(stem.to_string());
+                }
+            }
+        }
+    }
+
+    let total_files = file_ids.len();
+    let missing_count = file_ids.difference(&indexed_ids).count();
+    let orphan_count = indexed_ids.difference(&file_ids).count();
+
+    Ok(SessionIndexHealth {
+        missing_count,
+        orphan_count,
+        duplicate_count: duplicates,
+        total_indexed,
+        total_files,
+    })
+}
+
+#[tauri::command]
+fn repair_session_index(state: State<'_, AppState>) -> AppResult<SessionIndexRepairResult> {
+    let sessions_dir = state.paths.sessions_dir();
+    let index_file = state.paths.codex_home.join("session_index.jsonl");
+
+    // Scan all files in sessions_dir and rewrite session_index.jsonl cleanly
+    let scanner = SessionScanner::new(&state.paths);
+    let summary = scanner.scan()?;
+
+    let mut lines = Vec::new();
+    for session in summary.sessions {
+        let entry = serde_json::json!({
+            "id": session.session_id,
+            "thread_name": session.title,
+            "updated_at": session.last_updated_at.to_rfc3339()
+        });
+        lines.push(serde_json::to_string(&entry)?);
+    }
+
+    let content = lines.join("\n") + if lines.is_empty() { "" } else { "\n" };
+    std::fs::write(&index_file, content.as_bytes())?;
+
+    Ok(SessionIndexRepairResult {
+        repaired_count: lines.len(),
+        index_path: index_file.to_string_lossy().to_string(),
     })
 }
 
@@ -655,6 +743,8 @@ pub fn run() {
             scan_local_sessions,
             backup_sessions,
             restore_sessions,
+            check_session_index_health,
+            repair_session_index,
             compute_api_cost,
             oauth_start,
             oauth_finish,
