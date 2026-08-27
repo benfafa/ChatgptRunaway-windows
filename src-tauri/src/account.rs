@@ -211,10 +211,22 @@ pub(crate) fn decode_jwt_subscription_until(jwt: &str) -> Option<String> {
         .decode(parts[1])
         .ok()?;
     let v: serde_json::Value = serde_json::from_slice(&payload).ok()?;
-    v.get("https://api.openai.com/auth")
-        .and_then(|a| a.get("chatgpt_subscription_active_until"))
-        .and_then(|s| s.as_str())
-        .map(String::from)
+    let auth = v.get("https://api.openai.com/auth")?;
+
+    if let Some(s) = auth.get("chatgpt_subscription_active_until").and_then(|x| x.as_str()) {
+        return Some(s.to_string());
+    }
+    if let Some(ts) = auth.get("chatgpt_subscription_active_until").and_then(|x| x.as_i64()) {
+        if let Some(dt) = chrono::DateTime::from_timestamp(ts, 0) {
+            return Some(dt.to_rfc3339());
+        }
+    }
+    if let Some(ts) = auth.get("chatgpt_subscription_active_until").and_then(|x| x.as_f64()) {
+        if let Some(dt) = chrono::DateTime::from_timestamp(ts as i64, 0) {
+            return Some(dt.to_rfc3339());
+        }
+    }
+    None
 }
 
 /// Best-effort: import the current `~/.codex/auth.json` into the library if

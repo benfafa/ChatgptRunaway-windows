@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useState, useEffect } from "react";
 import type { SessionIndexHealth } from "../api";
 import { translations } from "../i18n";
 
@@ -11,7 +11,15 @@ interface Props {
 
 export function SessionRepairCard({ health, t, onRepair, onRefresh }: Props) {
   const [repairing, setRepairing] = useState(false);
+  const [justRepaired, setJustRepaired] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (justRepaired) {
+      const timer = setTimeout(() => setJustRepaired(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [justRepaired]);
 
   if (!health) return null;
 
@@ -21,6 +29,7 @@ export function SessionRepairCard({ health, t, onRepair, onRefresh }: Props) {
     setRepairing(true);
     try {
       await onRepair();
+      setJustRepaired(true);
     } finally {
       setRepairing(false);
     }
@@ -53,10 +62,18 @@ export function SessionRepairCard({ health, t, onRepair, onRefresh }: Props) {
       </div>
 
       <div style={{ fontSize: 12, color: "var(--fg-muted)", marginBottom: 10 }}>
-        {t.sessionRepairStatus
-          .replace("{missing}", String(health.missing_count))
-          .replace("{orphan}", String(health.orphan_count))
-          .replace("{duplicate}", String(health.duplicate_count))}
+        {justRepaired || !hasIssues ? (
+          <span style={{ color: "var(--ok)", fontWeight: 600 }}>
+            ✓ 索引状态正常（已同步 {health.total_files} 个会话）
+          </span>
+        ) : (
+          <span>
+            {t.sessionRepairStatus
+              .replace("{missing}", String(health.missing_count))
+              .replace("{orphan}", String(health.orphan_count))
+              .replace("{duplicate}", String(health.duplicate_count))}
+          </span>
+        )}
       </div>
 
       <button
@@ -69,14 +86,21 @@ export function SessionRepairCard({ health, t, onRepair, onRefresh }: Props) {
           justifyContent: "center",
           gap: 6,
           fontWeight: 600,
-          background: hasIssues ? "rgba(255, 90, 54, 0.08)" : "var(--glass-bg)",
-          borderColor: hasIssues ? "var(--accent)" : "var(--glass-border)",
+          background: justRepaired || !hasIssues ? "rgba(16, 185, 129, 0.08)" : "rgba(255, 90, 54, 0.08)",
+          borderColor: justRepaired || !hasIssues ? "var(--ok)" : "var(--accent)",
+          color: justRepaired || !hasIssues ? "var(--ok)" : "var(--fg)",
         }}
         onClick={handleRepair}
-        disabled={repairing}
+        disabled={repairing || justRepaired || !hasIssues}
       >
-        <span>🏥</span>
-        <span>{repairing ? t.sessionRepairing : t.sessionRepairAction}</span>
+        <span>{justRepaired || !hasIssues ? "✓" : "🏥"}</span>
+        <span>
+          {repairing
+            ? t.sessionRepairing
+            : justRepaired || !hasIssues
+            ? "索引已是最新状态"
+            : t.sessionRepairAction}
+        </span>
       </button>
     </div>
   );

@@ -282,12 +282,19 @@ fn load_session_index_titles(path: PathBuf) -> std::collections::HashMap<String,
 }
 
 fn session_id_from_path(p: &Path) -> String {
-    // %USERPROFILE%\.codex\sessions\YYYY\MM\DD\<uuid>.jsonl
-    // We surface the UUID stem; it's the only stable id we have.
-    p.file_stem()
+    // %USERPROFILE%\.codex\sessions\YYYY\MM\DD\rollout-YYYY-MM-DD-THH-MM-SS-<uuid>.jsonl or <uuid>.jsonl
+    let stem = p.file_stem()
         .and_then(|s| s.to_str())
-        .map(String::from)
-        .unwrap_or_else(|| "unknown".to_string())
+        .unwrap_or("unknown");
+
+    // If stem contains a 36-character UUID (8-4-4-4-12 format) at the end, extract it
+    if stem.len() >= 36 {
+        let candidate = &stem[stem.len() - 36..];
+        if candidate.chars().filter(|c| *c == '-').count() == 4 {
+            return candidate.to_string();
+        }
+    }
+    stem.to_string()
 }
 
 fn parse_session_file(path: &Path, session_id: &str) -> AppResult<(Vec<SessionTurn>, Option<String>)> {

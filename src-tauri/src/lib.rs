@@ -373,7 +373,17 @@ fn check_session_index_health(state: State<'_, AppState>) -> AppResult<SessionIn
             let path = entry.path();
             if path.is_file() && path.extension().map(|s| s.eq_ignore_ascii_case("jsonl")).unwrap_or(false) {
                 if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    file_ids.insert(stem.to_string());
+                    let id = if stem.len() >= 36 {
+                        let candidate = &stem[stem.len() - 36..];
+                        if candidate.chars().filter(|c| *c == '-').count() == 4 {
+                            candidate.to_string()
+                        } else {
+                            stem.to_string()
+                        }
+                    } else {
+                        stem.to_string()
+                    };
+                    file_ids.insert(id);
                 }
             }
         }
