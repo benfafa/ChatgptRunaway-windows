@@ -1,2 +1,7 @@
+# This is a single-package project, not a monorepo. The `packages` entry
+# is required by pnpm 9 + 10 when this file exists, even for a single
+# workspace root.
+packages:
+  - "."
 allowBuilds:
   esbuild: set this to true or false
