@@ -204,7 +204,7 @@ fn decode_jwt_email(jwt: &str) -> Option<String> {
     v.get("email").and_then(|s| s.as_str()).map(String::from)
 }
 
-fn decode_jwt_subscription_until(jwt: &str) -> Option<String> {
+pub(crate) fn decode_jwt_subscription_until(jwt: &str) -> Option<String> {
     let parts: Vec<&str> = jwt.split('.').collect();
     if parts.len() < 2 { return None; }
     let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
