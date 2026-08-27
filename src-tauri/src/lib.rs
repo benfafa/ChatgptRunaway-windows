@@ -493,16 +493,21 @@ pub fn hide_popover(app: &AppHandle) {
 
 #[cfg(target_os = "windows")]
 fn tray_position(app: &AppHandle) -> tauri::Result<tauri::PhysicalPosition<i32>> {
-    if let Some(tray) = app.tray_by_id("main") {
-        // Tauri 2 on Windows returns `Result<Option<Rect>>`; on macOS it's
-        // `Option<Rect>`. The `.ok().flatten()` pattern works on both.
-        if let Some(rect) = tray.rect().ok().flatten() {
-            // Center the popover horizontally on the tray icon, then drop it
-            // above the taskbar. The window is anchored to the cursor's
-            // screen, so we use the icon's left edge.
-            let x = rect.position.x + (rect.size.width / 2) - 190;
-            let y = rect.position.y - 560;
-            return Ok(tauri::PhysicalPosition::new(x.max(0), y.max(0)));
+    // Position the popover above the taskbar, centered on the primary
+    // monitor. We don't try to read the tray icon's exact rect here:
+    // the Tauri 2 `tauri::Position` / `tauri::Size` types differ between
+    // macOS and Windows (one exposes `x/y`, the other is logical), and
+    // getting them wrong leaves the window off-screen. Instead we center
+    // on the primary monitor and let the user move it if they want.
+    if let Some(window) = app.get_webview_window("main") {
+        if let Ok(Some(monitor)) = window.current_monitor() {
+            let size = monitor.size(); // PhysicalSize<u32>
+            let pos = monitor.position(); // PhysicalPosition<i32>
+            let pop_w = 380_i32;
+            let pop_h = 560_i32;
+            let x = pos.x + (size.width as i32 - pop_w) / 2;
+            let y = pos.y + (size.height as i32 - pop_h - 40).max(0);
+            return Ok(tauri::PhysicalPosition::new(x, y));
         }
     }
     Ok(tauri::PhysicalPosition::new(100, 100))
