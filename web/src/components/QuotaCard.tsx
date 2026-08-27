@@ -1,4 +1,4 @@
-﻿import type { QuotaSnapshot } from "../api";
+import type { QuotaSnapshot } from "../api";
 import { translations } from "../i18n";
 
 interface Props {
@@ -133,11 +133,16 @@ export function QuotaCard({ quota, t }: Props) {
 
 function formatRelative(date: Date): string {
   const diff = date.getTime() - Date.now();
-  if (diff <= 0) return "now";
-  const minutes = Math.round(diff / 60_000);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours}h`;
-  const days = Math.round(hours / 24);
-  return `${days}d`;
+  if (diff <= 0) return "即将重置 (now)";
+  const totalSeconds = Math.floor(diff / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}天`);
+  if (hours > 0 || days > 0) parts.push(`${hours}小时`);
+  parts.push(`${minutes}分钟`);
+
+  return parts.join(" ");
 }

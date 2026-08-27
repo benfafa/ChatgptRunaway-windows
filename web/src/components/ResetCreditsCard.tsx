@@ -1,4 +1,4 @@
-﻿import type { ResetCreditsSnapshot } from "../api";
+import type { ResetCreditsSnapshot } from "../api";
 import { translations } from "../i18n";
 
 interface Props {
@@ -44,10 +44,15 @@ export function ResetCreditsCard({ reset, t }: Props) {
 }
 
 function formatRemaining(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
+  if (seconds <= 0) return "已到期";
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}天`);
+  if (hours > 0 || days > 0) parts.push(`${hours}小时`);
+  parts.push(`${minutes}分钟`);
+
+  return parts.join(" ");
 }
