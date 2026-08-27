@@ -31,6 +31,10 @@ pub const AUTH_ENDPOINT: &str = "https://auth.openai.com/oauth/authorize";
 pub const TOKEN_ENDPOINT: &str = "https://auth.openai.com/oauth/token";
 pub const SCOPES: &str = "openid profile email offline_access api.connectors.read api.connectors.invoke";
 pub const ORIGINATOR: &str = "codex_cli_rs";
+/// Legacy fixed callback port kept for compatibility with external
+/// documentation; we no longer bind to it (see `discover_port`). The
+/// constant is kept so a config export or future manual override still
+/// compiles.
 pub const PREFERRED_PORT: u16 = 1455;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -194,10 +198,18 @@ pub struct CallbackServer {
 }
 
 impl CallbackServer {
-    /// Bind the preferred port. Returns `Err` if the port is taken.
-    pub fn bind(port: u16) -> AppResult<Self> {
-        let listener = TcpListener::bind(("127.0.0.1", port))
-            .map_err(|e| AppError::Auth(format!("bind :{port}: {e}")))?;
+    /// Bind an OS-assigned free port on `127.0.0.1`. We don't reuse a
+    /// fixed port across launches because repeated OAuth flows in the
+    /// same minute (e.g. user re-tries) would otherwise hit
+    /// `address-in-use` when the previous kernel-side TIME_WAIT hasn't
+    /// expired.
+    pub fn bind() -> AppResult<Self> {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .map_err(|e| AppError::Auth(format!("bind 127.0.0.1:0: {e}")))?;
+        let port = listener
+            .local_addr()
+            .map(|a| a.port())
+            .map_err(|e| AppError::Auth(format!("local_addr: {e}")))?;
         Ok(Self {
             port,
             captured: Arc::new(Mutex::new(None)),
@@ -534,11 +546,9 @@ mod tests {
 
     #[test]
     fn callback_server_handles_request() {
-        // Bind a free port via port 0 trick.
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        drop(listener);
-        let server = CallbackServer::bind(port).unwrap();
+        // Bind a free port via the public `bind` (OS-assigned).
+        let server = CallbackServer::bind().unwrap();
+        let port = server.port();
         // Connect from another thread, send a request, close.
         let handle = thread::spawn(move || {
             let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();

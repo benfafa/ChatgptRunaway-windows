@@ -170,11 +170,13 @@ export const api = {
 
   oauthStart: () => invoke<OAuthSessionInfo>("oauth_start"),
   oauthFinish: (
+    port: number,
     loginId: string,
     codeVerifier: string,
     stateParam: string,
   ) =>
     invoke<RedactedAuth>("oauth_finish", {
+      port,
       loginId,
       codeVerifier,
       stateParam,

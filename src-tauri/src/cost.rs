@@ -20,7 +20,7 @@ use walkdir::WalkDir;
 
 use crate::error::AppResult;
 use crate::paths::Paths;
-use crate::pricing::{self, PRICING_VERSION, LONG_CONTEXT_THRESHOLD};
+use crate::pricing::{self, Model, PRICING_VERSION, LONG_CONTEXT_THRESHOLD};
 use crate::session::{SessionTurn, TokenUsage};
 
 #[derive(Debug, Clone, Serialize)]

@@ -68,9 +68,11 @@ function OAuthFlow({
       // because Tauri 2's `shell.open` resolves to the OS handler.
       await open(session.auth_url);
       setPhase("waiting");
-      // Hand off to the backend: it binds the callback server, waits for
+      // Hand off to the backend: it picks up the listener it created in
+      // `oauth_start` (bound to the same `port` we returned), waits for
       // the browser to redirect, and exchanges the code for tokens.
       await api.oauthFinish(
+        session.port,
         session.login_id,
         session.code_verifier,
         session.state,

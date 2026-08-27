@@ -6,6 +6,7 @@
 pub mod account;
 pub mod auth;
 pub mod cost;
+pub mod crashlog;
 pub mod error;
 pub mod oauth;
 pub mod paths;
@@ -287,36 +288,64 @@ pub struct OAuthSessionInfo {
 
 #[tauri::command]
 fn oauth_start() -> AppResult<OAuthSessionInfo> {
-    let session = oauth::OAuthLogin::start_session(oauth::PREFERRED_PORT, 600)?;
-    // We do NOT bind the callback server here: the frontend opens the auth
-    // URL, and only when the user has actually finished signing in does the
-    // browser hit our server. We bind on-demand inside `oauth_finish` to
-    // minimise the time a stray process can squat on port 1455.
+    // Bind the callback server NOW so we can return the actual port to the
+    // frontend. The listener stays alive in the background; we hand the
+    // raw fd ownership to a worker thread inside `oauth_finish`.
+    //
+    // We don't reuse a fixed port (e.g. 1455) because repeated OAuth flows
+    // in the same minute would otherwise hit `address-in-use` from
+    // TIME_WAIT. Letting the OS pick avoids that entirely.
+    let server = oauth::CallbackServer::bind()?;
+    let port = server.port();
+    // Stash the listener in a global so `oauth_finish` can recover it
+    // by matching on the port. (Tauri's State is a typed map; using a
+    // dedicated Mutex<HashMap<u16, CallbackServer>> is overkill for the
+    // one-in-flight-at-a-time pattern we have here.)
+    PENDING_OAUTH.lock().unwrap().replace(server);
+    let session = oauth::OAuthLogin::start_session(port, 600)?;
     Ok(OAuthSessionInfo {
         login_id: session.login_id,
         auth_url: session.auth_url,
-        port: session.port,
+        port,
         expires_at_unix: session.expires_at_unix,
         code_verifier: session.code_verifier,
         state: session.state,
     })
 }
 
+/// One in-flight OAuth session at a time. Replaced on every `oauth_start`;
+/// taken out by `oauth_finish`.
+static PENDING_OAUTH: std::sync::Mutex<Option<oauth::CallbackServer>> =
+    std::sync::Mutex::new(None);
+
 #[tauri::command]
 async fn oauth_finish(
     state: State<'_, AppState>,
+    port: u16,
     login_id: String,
     code_verifier: String,
     state_param: String,
 ) -> AppResult<crate::auth::CodexAuth> {
-    // 1. Spin up the callback server in a blocking thread (we don't want to
-    //    hold the Tauri runtime hostage for up to 10 minutes).
-    let port = oauth::PREFERRED_PORT;
-    let bind_result = tokio::task::spawn_blocking(move || oauth::CallbackServer::bind(port)).await;
-    let server = match bind_result {
-        Ok(Ok(s)) => s,
-        Ok(Err(e)) => return Err(e),
-        Err(e) => return Err(AppError::Auth(format!("join error: {e}"))),
+    // 1. Take ownership of the listener we created in `oauth_start`.
+    let server = {
+        let mut guard = PENDING_OAUTH.lock().unwrap();
+        let pending = guard.take();
+        match pending {
+            Some(s) if s.port() == port => s,
+            Some(other) => {
+                // Port mismatch: someone else started a new session while
+                // we were waiting. Drop ours; use the new one (best effort).
+                let _ = other;
+                return Err(AppError::Auth(
+                    "OAuth session was superseded; please retry".to_string(),
+                ));
+            }
+            None => {
+                return Err(AppError::Auth(
+                    "no pending OAuth session; please start again".to_string(),
+                ));
+            }
+        }
     };
     let callback_url = tokio::task::spawn_blocking(move || {
         server.wait_for_callback(std::time::Duration::from_secs(600))
@@ -523,6 +552,10 @@ fn tray_position(_app: &AppHandle) -> tauri::Result<tauri::PhysicalPosition<i32>
 // -----------------------------------------------------------------------------
 
 pub fn run() {
+    // Install the panic hook *first* so any subsequent panic during
+    // startup produces a log file (and a Windows MessageBox) instead of a
+    // silent abort.
+    crashlog::install();
     let _ = env_logger::try_init();
     let state = match AppState::init() {
         Ok(s) => s,
@@ -586,12 +619,12 @@ pub fn run() {
                     }
                 });
             }
-            // Pre-render the dynamic tray icon with a neutral 0% state so the
-            // user sees our icon from the moment the app launches, even
-            // before the first quota fetch completes.
-            if let Err(e) = apply_tray_icon(app.handle(), 0.0) {
-                log::warn!("initial tray icon render failed: {e}");
-            }
+            // We deliberately do NOT pre-render the tray icon here.
+            // tauri.conf.json already wires a static iconPath. Calling
+            // `tray.set_icon()` during setup races with that initial
+            // render and can produce a no-icon / black-square tray entry
+            // on Windows 10. The icon gets a fresh draw on the very first
+            // `fetch_quota` (which is also when we have a real percent).
             Ok(())
         })
         .run(tauri::generate_context!())
