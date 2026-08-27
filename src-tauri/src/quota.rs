@@ -125,6 +125,32 @@ where
     Ok(opt.unwrap_or_default())
 }
 
+fn deserialize_flexible_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match opt {
+        Some(serde_json::Value::Number(n)) => Ok(n.as_f64()),
+        Some(serde_json::Value::String(s)) => s.parse::<f64>().map(Some).map_err(serde::de::Error::custom),
+        Some(serde_json::Value::Null) | None => Ok(None),
+        _ => Ok(None),
+    }
+}
+
+fn deserialize_flexible_i64<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt = Option::<serde_json::Value>::deserialize(deserializer)?;
+    match opt {
+        Some(serde_json::Value::Number(n)) => Ok(n.as_i64()),
+        Some(serde_json::Value::String(s)) => s.parse::<i64>().map(Some).map_err(serde::de::Error::custom),
+        Some(serde_json::Value::Null) | None => Ok(None),
+        _ => Ok(None),
+    }
+}
+
 #[derive(Debug, Default, Deserialize)]
 struct RateLimit {
     primary_window: Option<RateWindowRaw>,
@@ -133,11 +159,11 @@ struct RateLimit {
 
 #[derive(Debug, Deserialize)]
 struct RateWindowRaw {
-    #[serde(rename = "used_percent")]
+    #[serde(default, rename = "used_percent", deserialize_with = "deserialize_flexible_f64")]
     used_percent: Option<f64>,
-    #[serde(rename = "window_minutes")]
+    #[serde(default, rename = "window_minutes", deserialize_with = "deserialize_flexible_i64")]
     window_minutes: Option<i64>,
-    #[serde(rename = "reset_at")]
+    #[serde(default, rename = "reset_at", deserialize_with = "deserialize_flexible_i64")]
     reset_at: Option<i64>,
 }
 
@@ -151,7 +177,7 @@ struct NamedRateLimit {
 
 #[derive(Debug, Deserialize)]
 struct CreditsBlock {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_flexible_f64")]
     balance: Option<f64>,
 }
 
@@ -236,7 +262,7 @@ impl QuotaSnapshot {
 
 #[derive(Debug, Deserialize)]
 struct ResetCreditsResponse {
-    #[serde(rename = "available_count")]
+    #[serde(default, rename = "available_count", deserialize_with = "deserialize_flexible_i64")]
     available_count: Option<i64>,
     #[serde(default, deserialize_with = "deserialize_null_as_empty_vec")]
     credits: Vec<ResetCreditRaw>,
@@ -248,9 +274,9 @@ struct ResetCreditRaw {
     id: Option<String>,
     #[serde(default)]
     status: Option<String>,
-    #[serde(rename = "created_at")]
+    #[serde(default, rename = "created_at", deserialize_with = "deserialize_flexible_i64")]
     created_at: Option<i64>,
-    #[serde(rename = "expires_at")]
+    #[serde(default, rename = "expires_at", deserialize_with = "deserialize_flexible_i64")]
     expires_at: Option<i64>,
 }
 
