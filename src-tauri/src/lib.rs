@@ -314,6 +314,12 @@ fn restore_sessions(state: State<'_, AppState>, source_path: String) -> AppResul
             }
         }
     }
+    Ok(RestoreResult {
+        files_restored: restored,
+        dest_dir: dest.to_string_lossy().to_string(),
+    })
+}
+
 #[derive(Debug, Serialize)]
 pub struct SessionIndexHealth {
     pub missing_count: usize,
