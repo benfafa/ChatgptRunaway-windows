@@ -109,11 +109,20 @@ struct QuotaResponse {
     #[serde(rename = "plan_type")]
     plan_type: Option<String>,
     #[serde(default)]
-    rate_limit: RateLimit,
-    #[serde(default)]
+    rate_limit: Option<RateLimit>,
+    #[serde(default, deserialize_with = "deserialize_null_as_empty_vec")]
     additional_rate_limits: Vec<NamedRateLimit>,
     #[serde(default)]
     credits: Option<CreditsBlock>,
+}
+
+fn deserialize_null_as_empty_vec<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    let opt = Option::<Vec<T>>::deserialize(deserializer)?;
+    Ok(opt.unwrap_or_default())
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -182,8 +191,8 @@ pub struct QuotaSnapshot {
 
 impl QuotaSnapshot {
     fn from_response(r: QuotaResponse, now: DateTime<Utc>) -> Self {
-        let primary = r
-            .rate_limit
+        let rate_limit = r.rate_limit.unwrap_or_default();
+        let primary = rate_limit
             .primary_window
             .map(RateWindow::from_raw)
             .unwrap_or(RateWindow {
@@ -191,7 +200,7 @@ impl QuotaSnapshot {
                 window_minutes: None,
                 resets_at: None,
             });
-        let secondary = r.rate_limit.secondary_window.map(RateWindow::from_raw);
+        let secondary = rate_limit.secondary_window.map(RateWindow::from_raw);
         let additional_windows = r
             .additional_rate_limits
             .into_iter()
@@ -229,7 +238,7 @@ impl QuotaSnapshot {
 struct ResetCreditsResponse {
     #[serde(rename = "available_count")]
     available_count: Option<i64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_null_as_empty_vec")]
     credits: Vec<ResetCreditRaw>,
 }
 
