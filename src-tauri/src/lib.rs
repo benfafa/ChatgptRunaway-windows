@@ -668,9 +668,9 @@ pub fn run() {
             let handle_for_menu = app.handle().clone();
             if let Some(tray) = app.tray_by_id("main") {
                 tray.on_tray_icon_event(move |_tray, event| {
-                    use tauri::tray::TrayIconEvent;
-                    if let TrayIconEvent::Click { button, .. } = event {
-                        if matches!(button, tauri::tray::MouseButton::Left) {
+                    use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+                    if let TrayIconEvent::Click { button, button_state, .. } = event {
+                        if matches!(button, MouseButton::Left) && matches!(button_state, MouseButtonState::Up) {
                             toggle_popover(&handle_for_event);
                         }
                     }
